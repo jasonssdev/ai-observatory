@@ -1,0 +1,44 @@
+[project]
+name = "ai-observatory"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Jason Dev", email = "jasonssdev@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "feedparser>=6.0.12",
+    "httpx>=0.28.1",
+    "pyyaml>=6.0.3",
+    "typer>=0.27.0",
+]
+
+[project.scripts]
+ai-observatory = "ai_observatory:main"
+
+[build-system]
+requires = ["uv_build>=0.11.29,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.15.22",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra --strict-markers --strict-config"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]

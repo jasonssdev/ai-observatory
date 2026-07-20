@@ -1,0 +1,48 @@
+schema: spec-driven
+persistence_mode: hybrid
+strict_tdd: true
+
+context: |
+  Tech stack: Python >=3.13, uv (build/package manager), typer CLI, feedparser, httpx, pyyaml
+  Architecture: local-first 3-stage pipeline (collection -> storage -> daily/weekly synthesis)
+  Storage: SQLite (query/dedup) + Markdown (daily records, weekly briefings)
+  Testing: pytest (dev dep, not yet wired up), ruff (lint + format)
+  Style: snake_case modules/functions, PascalCase classes, type hints on public interfaces
+
+testing:
+  test_runner: "uv run pytest"
+  test_layers:
+    unit: false
+    integration: false
+    e2e: false
+  coverage:
+    available: false
+    command: ""
+  quality:
+    linter: "uv run ruff check ."
+    type_checker: ""
+    formatter: "uv run ruff format ."
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+  apply:
+    guidelines:
+      - Follow existing code patterns and conventions in AGENTS.md
+    tdd: true
+    test_command: "uv run pytest"
+  verify:
+    test_command: "uv run pytest"
+    build_command: "uv build"
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
