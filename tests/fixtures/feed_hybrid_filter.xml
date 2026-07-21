@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Hybrid Filter Fixture Feed</title>
+    <link>https://example.com</link>
+    <description>Fixture for the hybrid-filter end-to-end CLI test.</description>
+    <item>
+      <title>Company announces new funding round</title>
+      <link>https://example.com/articles/funding-round</link>
+      <pubDate>Mon, 20 Jul 2026 09:00:00 GMT</pubDate>
+      <description>A routine funding announcement.</description>
+    </item>
+    <item>
+      <title>New reasoning benchmark results announced</title>
+      <link>https://example.com/articles/benchmark-results</link>
+      <pubDate>Mon, 20 Jul 2026 10:00:00 GMT</pubDate>
+      <description>Neutral technical summary with no noise keywords.</description>
+    </item>
+  </channel>
+</rss>

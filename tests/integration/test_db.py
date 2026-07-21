@@ -12,6 +12,7 @@ import pytest
 from ai_observatory.collection.dedup import canonicalize_url, title_hash
 from ai_observatory.storage import db
 from ai_observatory.storage.models import Item
+from ai_observatory.synthesis.filter import Mode, Significance, Verdict
 
 
 def _utc(*args: int) -> datetime:
@@ -128,6 +129,182 @@ class TestUpsertItems:
         ).fetchone()
         assert row[0] == canonicalize_url(item.url)
         assert row[1] == title_hash(item.title)
+
+
+class TestItemSignificanceTable:
+    def test_connect_creates_item_significance_table_idempotently(
+        self, tmp_path: Path
+    ) -> None:
+        db_path = tmp_path / "observatory.db"
+
+        first = db.connect(str(db_path))
+        first.close()
+        second = db.connect(str(db_path))
+        try:
+            tables = [
+                row[0]
+                for row in second.execute(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type='table' AND name='item_significance'"
+                ).fetchall()
+            ]
+            assert tables == ["item_significance"]
+        finally:
+            second.close()
+
+
+class TestUpsertSignificance:
+    def test_upsert_same_item_id_twice_updates_in_place(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        db.upsert_items(conn, [_item(id_="a")])
+
+        db.upsert_significance(
+            conn,
+            [
+                Significance(
+                    item_id="a",
+                    label=Verdict.ROUTINE,
+                    mode=Mode.DETERMINISTIC,
+                    model=None,
+                )
+            ],
+        )
+        db.upsert_significance(
+            conn,
+            [
+                Significance(
+                    item_id="a",
+                    label=Verdict.SIGNIFICANT,
+                    mode=Mode.LLM,
+                    model="llama3.2",
+                )
+            ],
+        )
+
+        rows = conn.execute(
+            "SELECT label, mode, model FROM item_significance WHERE item_id = ?",
+            ("a",),
+        ).fetchall()
+        assert rows == [("SIGNIFICANT", "LLM", "llama3.2")]
+
+
+class TestSignificanceForDate:
+    def test_query_returns_only_matching_day_verdicts(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        db.upsert_items(
+            conn,
+            [
+                _item(id_="day1", published_at=_utc(2026, 7, 20, 1, 0)),
+                _item(id_="day2", published_at=_utc(2026, 7, 21, 1, 0)),
+            ],
+        )
+        db.upsert_significance(
+            conn,
+            [
+                Significance(
+                    item_id="day1",
+                    label=Verdict.SIGNIFICANT,
+                    mode=Mode.DETERMINISTIC,
+                    model=None,
+                ),
+                Significance(
+                    item_id="day2",
+                    label=Verdict.ROUTINE,
+                    mode=Mode.DETERMINISTIC,
+                    model=None,
+                ),
+            ],
+        )
+
+        result = db.significance_for_date(conn, date(2026, 7, 20))
+
+        assert {s.item_id for s in result} == {"day1"}
+
+
+class TestSignificanceForItem:
+    def test_query_by_item_id_returns_its_verdict(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        db.upsert_items(conn, [_item(id_="a", published_at=_utc(2026, 7, 20, 1, 0))])
+        db.upsert_significance(
+            conn,
+            [
+                Significance(
+                    item_id="a",
+                    label=Verdict.SIGNIFICANT,
+                    mode=Mode.LLM,
+                    model="llama3.2",
+                ),
+            ],
+        )
+
+        result = db.significance_for_item(conn, "a")
+
+        assert result is not None
+        assert result.label == Verdict.SIGNIFICANT
+        assert result.model == "llama3.2"
+
+    def test_query_by_unclassified_item_id_returns_none(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        db.upsert_items(conn, [_item(id_="a", published_at=_utc(2026, 7, 20, 1, 0))])
+
+        result = db.significance_for_item(conn, "a")
+
+        assert result is None
+
+
+class TestUnclassifiedForDate:
+    def test_only_unclassified_items_are_returned(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        db.upsert_items(
+            conn,
+            [
+                _item(id_="classified", published_at=_utc(2026, 7, 20, 1, 0)),
+                _item(id_="unclassified", published_at=_utc(2026, 7, 20, 2, 0)),
+            ],
+        )
+        db.upsert_significance(
+            conn,
+            [
+                Significance(
+                    item_id="classified",
+                    label=Verdict.SIGNIFICANT,
+                    mode=Mode.DETERMINISTIC,
+                    model=None,
+                ),
+            ],
+        )
+
+        result = db.unclassified_for_date(conn, date(2026, 7, 20))
+
+        assert {item.id for item in result} == {"unclassified"}
+
+
+class TestClearSignificance:
+    def test_clear_makes_item_reappear_as_unclassified(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        db.upsert_items(conn, [_item(id_="a", published_at=_utc(2026, 7, 20, 1, 0))])
+        db.upsert_significance(
+            conn,
+            [
+                Significance(
+                    item_id="a",
+                    label=Verdict.SIGNIFICANT,
+                    mode=Mode.DETERMINISTIC,
+                    model=None,
+                ),
+            ],
+        )
+
+        db.clear_significance(conn)
+
+        result = db.unclassified_for_date(conn, date(2026, 7, 20))
+        assert {item.id for item in result} == {"a"}
 
 
 class TestItemsForDate:

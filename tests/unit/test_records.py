@@ -73,9 +73,9 @@ class TestRenderMarkdown:
             ),
         ]
 
-        content = render_markdown(items, date(2026, 7, 20))
+        content = render_markdown(items, [], date(2026, 7, 20), "hybrid")
 
-        assert content.startswith("# 2026-07-20 (3 items)")
+        assert content.startswith("# 2026-07-20 (3 items) (filter: hybrid)")
 
     def test_groups_by_category_and_sorts_by_priority_then_time_desc(self) -> None:
         lab_p2_early = _item(
@@ -104,7 +104,7 @@ class TestRenderMarkdown:
         )
 
         content = render_markdown(
-            [lab_p2_early, news_p1, lab_p1_late], date(2026, 7, 20)
+            [lab_p2_early, news_p1, lab_p1_late], [], date(2026, 7, 20), "hybrid"
         )
 
         lab_index = content.index("## Lab")
@@ -127,13 +127,109 @@ class TestRenderMarkdown:
             url="https://openai.com/news/big-announcement",
         )
 
-        content = render_markdown([item], date(2026, 7, 20))
+        content = render_markdown([item], [], date(2026, 7, 20), "hybrid")
 
         assert (
             "- [Big Announcement](https://openai.com/news/big-announcement)"
             " — OpenAI (P1) · 14:05 UTC" in content
         )
         assert "A short summary." in content
+
+
+class TestRenderTwoBuckets:
+    def test_significant_and_set_aside_both_populated(self) -> None:
+        significant_item = _item(
+            id_="sig",
+            title="Significant Item",
+            category="lab",
+            source="OpenAI",
+            source_priority=1,
+            published_at=_utc(2026, 7, 20, 12, 0),
+        )
+        routine_item = _item(
+            id_="rou",
+            title="Routine Item",
+            category="lab",
+            source="OpenAI",
+            source_priority=2,
+            published_at=_utc(2026, 7, 20, 13, 0),
+        )
+
+        content = render_markdown(
+            [significant_item], [routine_item], date(2026, 7, 20), "hybrid"
+        )
+
+        significant_index = content.index("## Significant")
+        set_aside_index = content.index("## Set aside")
+        assert significant_index < set_aside_index
+        assert "Significant Item" in content[significant_index:set_aside_index]
+        assert "Routine Item" in content[set_aside_index:]
+
+    def test_empty_set_aside_bucket_still_renders_header(self) -> None:
+        significant_item = _item(
+            id_="sig",
+            title="Significant Item",
+            category="lab",
+            source="OpenAI",
+            source_priority=1,
+            published_at=_utc(2026, 7, 20, 12, 0),
+        )
+
+        content = render_markdown(
+            [significant_item], [], date(2026, 7, 20), "hybrid"
+        )
+
+        assert "## Set aside" in content
+        set_aside_section = content[content.index("## Set aside") :]
+        assert "_(none)_" in set_aside_section
+
+    def test_empty_significant_bucket_still_renders_header(self) -> None:
+        routine_item = _item(
+            id_="rou",
+            title="Routine Item",
+            category="lab",
+            source="OpenAI",
+            source_priority=2,
+            published_at=_utc(2026, 7, 20, 12, 0),
+        )
+
+        content = render_markdown([], [routine_item], date(2026, 7, 20), "hybrid")
+
+        assert "## Significant" in content
+        significant_section = content[
+            content.index("## Significant") : content.index("## Set aside")
+        ]
+        assert "_(none)_" in significant_section
+
+    def test_set_aside_item_renders_compact_line_without_summary(self) -> None:
+        routine_item = _item(
+            id_="rou",
+            title="Routine Item",
+            category="lab",
+            source="OpenAI",
+            source_priority=2,
+            published_at=_utc(2026, 7, 20, 12, 0),
+            summary="This summary must not appear.",
+            url="https://example.com/routine",
+        )
+
+        content = render_markdown([], [routine_item], date(2026, 7, 20), "hybrid")
+
+        assert (
+            "- [Routine Item](https://example.com/routine)"
+            " — OpenAI (P2) · 12:00 UTC" in content
+        )
+        assert "This summary must not appear." not in content
+
+    def test_header_signals_deterministic_only_mode(self) -> None:
+        content = render_markdown([], [], date(2026, 7, 20), "deterministic-only")
+
+        assert "(filter: deterministic-only — LLM unavailable)" in content
+
+    def test_header_signals_hybrid_mode(self) -> None:
+        content = render_markdown([], [], date(2026, 7, 20), "hybrid")
+
+        assert "(filter: hybrid)" in content
 
 
 class TestWriteRecord:
@@ -165,8 +261,15 @@ class TestWriteRecord:
         )
         path = tmp_path / "2026-07-20.md"
 
-        write_record(path, render_markdown([prior_item], date(2026, 7, 20)))
-        write_record(path, render_markdown([prior_item, new_item], date(2026, 7, 20)))
+        write_record(
+            path, render_markdown([prior_item], [], date(2026, 7, 20), "hybrid")
+        )
+        write_record(
+            path,
+            render_markdown(
+                [prior_item, new_item], [], date(2026, 7, 20), "hybrid"
+            ),
+        )
 
         content = path.read_text(encoding="utf-8")
         assert content.count("Prior Item") == 1

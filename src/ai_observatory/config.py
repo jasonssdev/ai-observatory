@@ -17,6 +17,7 @@ _DEFAULT_SUMMARY_MAX_CHARS = 500
 _DEFAULT_OLLAMA_URL = "http://localhost:11434"
 _DEFAULT_OLLAMA_MODEL = "llama3.2"
 _DEFAULT_OLLAMA_TIMEOUT_SECONDS = 60.0
+_DEFAULT_FILTER_KEEP_PRIORITY = 1
 
 
 def _int_env(name: str, default: int) -> int:
@@ -55,6 +56,7 @@ class Config:
     ollama_url: str
     ollama_model: str
     ollama_timeout_seconds: float
+    filter_keep_priority: int
 
     @classmethod
     def from_env(cls) -> Config:
@@ -74,5 +76,8 @@ class Config:
             ollama_model=os.environ.get("AIOBS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL),
             ollama_timeout_seconds=_float_env(
                 "AIOBS_OLLAMA_TIMEOUT_SECONDS", _DEFAULT_OLLAMA_TIMEOUT_SECONDS
+            ),
+            filter_keep_priority=_int_env(
+                "AIOBS_FILTER_KEEP_PRIORITY", _DEFAULT_FILTER_KEEP_PRIORITY
             ),
         )

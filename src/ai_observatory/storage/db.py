@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from ai_observatory.collection.dedup import canonicalize_url, title_hash
 from ai_observatory.storage.models import Item
+from ai_observatory.synthesis.filter import Mode, Significance, Verdict
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS items (
@@ -26,6 +27,13 @@ CREATE TABLE IF NOT EXISTS items (
 );
 CREATE INDEX IF NOT EXISTS idx_published_at ON items(published_at);
 CREATE INDEX IF NOT EXISTS idx_source_priority ON items(source_priority);
+CREATE TABLE IF NOT EXISTS item_significance (
+    item_id TEXT PRIMARY KEY REFERENCES items(id),
+    label TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    model TEXT,
+    classified_at TEXT NOT NULL
+);
 """
 
 _SELECT_COLUMNS = (
@@ -114,3 +122,93 @@ def items_for_date(connection: sqlite3.Connection, target_date: date) -> list[It
         (pattern,),
     )
     return [_row_to_item(row) for row in cursor.fetchall()]
+
+
+def upsert_significance(
+    connection: sqlite3.Connection, verdicts: list[Significance]
+) -> None:
+    """Insert or update significance verdicts, keyed on item id (idempotent).
+
+    Re-writing a verdict for an already-classified item updates the
+    existing row (label/mode/model/classified_at) rather than creating a
+    duplicate.
+    """
+    classified_at = datetime.now(UTC).isoformat()
+    rows = [
+        (verdict.item_id, verdict.label, verdict.mode, verdict.model, classified_at)
+        for verdict in verdicts
+    ]
+    connection.executemany(
+        """
+        INSERT INTO item_significance (item_id, label, mode, model, classified_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(item_id) DO UPDATE SET
+            label = excluded.label,
+            mode = excluded.mode,
+            model = excluded.model,
+            classified_at = excluded.classified_at
+        """,
+        rows,
+    )
+    connection.commit()
+
+
+def significance_for_date(
+    connection: sqlite3.Connection, target_date: date
+) -> list[Significance]:
+    """Return persisted verdicts for items published on `target_date` (UTC)."""
+    pattern = f"{target_date.isoformat()}%"
+    cursor = connection.execute(
+        """
+        SELECT s.item_id, s.label, s.mode, s.model
+        FROM item_significance s
+        JOIN items i ON i.id = s.item_id
+        WHERE i.published_at LIKE ?
+        """,
+        (pattern,),
+    )
+    return [
+        Significance(
+            item_id=row[0], label=Verdict(row[1]), mode=Mode(row[2]), model=row[3]
+        )
+        for row in cursor.fetchall()
+    ]
+
+
+def significance_for_item(
+    connection: sqlite3.Connection, item_id: str
+) -> Significance | None:
+    """Return the persisted verdict for a single item id, or `None`."""
+    row = connection.execute(
+        "SELECT item_id, label, mode, model FROM item_significance WHERE item_id = ?",
+        (item_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return Significance(
+        item_id=row[0], label=Verdict(row[1]), mode=Mode(row[2]), model=row[3]
+    )
+
+
+def unclassified_for_date(
+    connection: sqlite3.Connection, target_date: date
+) -> list[Item]:
+    """Return items published on `target_date` (UTC) with no verdict yet."""
+    pattern = f"{target_date.isoformat()}%"
+    cursor = connection.execute(
+        f"""
+        SELECT {_SELECT_COLUMNS}
+        FROM items
+        LEFT JOIN item_significance ON item_significance.item_id = items.id
+        WHERE items.published_at LIKE ? AND item_significance.label IS NULL
+        ORDER BY items.published_at
+        """,
+        (pattern,),
+    )
+    return [_row_to_item(row) for row in cursor.fetchall()]
+
+
+def clear_significance(connection: sqlite3.Connection) -> None:
+    """Delete all persisted significance verdicts (reclassify path)."""
+    connection.execute("DELETE FROM item_significance")
+    connection.commit()

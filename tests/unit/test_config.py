@@ -130,6 +130,36 @@ class TestFloatEnv:
         assert _float_env("AIOBS_TEST_FLOAT", 60.0) == 60.0
 
 
+class TestFilterKeepPriority:
+    def test_unset_defaults_to_one(self, monkeypatch) -> None:
+        monkeypatch.delenv("AIOBS_FILTER_KEEP_PRIORITY", raising=False)
+
+        config = Config.from_env()
+
+        assert config.filter_keep_priority == 1
+
+    def test_env_override_takes_effect(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_FILTER_KEEP_PRIORITY", "2")
+
+        config = Config.from_env()
+
+        assert config.filter_keep_priority == 2
+
+    def test_invalid_value_falls_back_to_one(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_FILTER_KEEP_PRIORITY", "abc")
+
+        config = Config.from_env()
+
+        assert config.filter_keep_priority == 1
+
+    def test_negative_value_falls_back_to_one(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_FILTER_KEEP_PRIORITY", "-1")
+
+        config = Config.from_env()
+
+        assert config.filter_keep_priority == 1
+
+
 class TestOllamaSettings:
     def test_no_env_vars_uses_hardcoded_defaults(self, monkeypatch) -> None:
         for name in (
