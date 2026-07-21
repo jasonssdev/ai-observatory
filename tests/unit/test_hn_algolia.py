@@ -46,6 +46,16 @@ class TestParseHnAlgolia:
         raw = json.loads(item.raw)
         assert raw["objectID"] == "222222"
 
+    def test_parse_injects_normalized_signal_score_and_scale(self) -> None:
+        items = parse_hn_algolia(
+            _fixture_bytes("hn_algolia.json"), min_points=30, max_chars=500
+        )
+
+        raw = json.loads(items[0].raw)
+        assert raw["signal_score"] == raw["points"]
+        assert isinstance(raw["signal_score"], int)
+        assert raw["signal_scale"] == "hn_points"
+
     def test_parse_below_threshold_dropped(self) -> None:
         items = parse_hn_algolia(
             _fixture_bytes("hn_algolia.json"), min_points=30, max_chars=500

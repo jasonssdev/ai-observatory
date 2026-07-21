@@ -7,12 +7,18 @@ degrades to deterministic-only (never fails) on the first `LLMError`.
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from enum import StrEnum
 
 from ai_observatory.config import Config
-from ai_observatory.storage.models import Item
+from ai_observatory.storage.models import (
+    SIGNAL_SCALE_KEY,
+    SIGNAL_SCORE_KEY,
+    Item,
+    SignalScale,
+)
 from ai_observatory.synthesis.llm import LLMClient, LLMError
 
 logger = logging.getLogger(__name__)
@@ -23,6 +29,14 @@ NOISE_KEYWORDS = [
     "webinar",
     "sponsored",
 ]
+
+# Maps a collector's `raw[SIGNAL_SCALE_KEY]` tag to the `Config` field
+# holding its keep threshold. `None` threshold means the rule is disabled
+# for that scale.
+_SCALE_TO_THRESHOLD = {
+    SignalScale.HF_UPVOTES: lambda config: config.filter_hf_keep_upvotes,
+    SignalScale.HN_POINTS: lambda config: config.filter_hn_keep_points,
+}
 
 
 class Verdict(StrEnum):
@@ -49,15 +63,54 @@ class Significance:
     model: str | None
 
 
+def _meets_score_keep_threshold(item: Item, config: Config) -> bool:
+    """Check `item`'s normalized popularity score against its keep threshold.
+
+    Never raises: malformed `raw`, a non-dict payload, a missing/non-int
+    (bools excluded) `signal_score`, an unrecognized `signal_scale`, or a
+    disabled (`None`) threshold all simply mean the rule does not fire.
+    """
+    try:
+        raw = json.loads(item.raw)
+    except (TypeError, ValueError):
+        return False
+
+    if not isinstance(raw, dict):
+        return False
+
+    scale = raw.get(SIGNAL_SCALE_KEY)
+    score_value = raw.get(SIGNAL_SCORE_KEY)
+    threshold_selector = _SCALE_TO_THRESHOLD.get(scale)
+    if threshold_selector is None:
+        return False
+
+    if not isinstance(score_value, int) or isinstance(score_value, bool):
+        return False
+
+    threshold = threshold_selector(config)
+    if threshold is None:
+        return False
+
+    return score_value >= threshold
+
+
 def score(item: Item, config: Config) -> Verdict | None:
     """Classify `item` deterministically, or return `None` if UNCERTAIN.
 
     High-priority sources (`source_priority <= config.filter_keep_priority`)
-    are auto-kept as `SIGNIFICANT`. Items whose title or summary match a
-    configured noise keyword are auto-dropped as `ROUTINE`. Anything else
-    is UNCERTAIN (`None`) and left for the LLM to decide.
+    are auto-kept as `SIGNIFICANT`. Items whose normalized
+    `raw[SIGNAL_SCORE_KEY]` meets or exceeds the per-`raw[SIGNAL_SCALE_KEY]`
+    keep threshold are also auto-kept as `SIGNIFICANT` (this rule is
+    evaluated before the noise-keyword rule, so a high score overrides a
+    noise keyword). Items whose
+    title or summary match a configured noise keyword are auto-dropped as
+    `ROUTINE`. Anything else is UNCERTAIN (`None`) and left for the LLM to
+    decide.
     """
     if item.source_priority <= config.filter_keep_priority:
+        return Verdict.SIGNIFICANT
+
+    if _meets_score_keep_threshold(item, config):
         return Verdict.SIGNIFICANT
 
     haystack = f"{item.title} {item.summary}".lower()

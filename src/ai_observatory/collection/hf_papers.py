@@ -16,7 +16,12 @@ from typing import Any
 from ai_observatory.collection.base import Source
 from ai_observatory.collection.dedup import canonicalize_url, item_id
 from ai_observatory.collection.text import normalize_summary
-from ai_observatory.storage.models import Item
+from ai_observatory.storage.models import (
+    SIGNAL_SCALE_KEY,
+    SIGNAL_SCORE_KEY,
+    Item,
+    SignalScale,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +81,14 @@ def parse_hf_papers(data: bytes, min_upvotes: int, max_chars: int) -> list[Item]
         summary = entry.get("summary") or ""
         url = _CANONICAL_URL_TEMPLATE.format(paper_id=paper_id)
         canonical = canonicalize_url(url)
-        raw = json.dumps(entry, default=str)
+        raw = json.dumps(
+            {
+                **entry,
+                SIGNAL_SCORE_KEY: upvotes,
+                SIGNAL_SCALE_KEY: SignalScale.HF_UPVOTES,
+            },
+            default=str,
+        )
 
         items.append(
             Item(

@@ -34,6 +34,23 @@ def _int_env(name: str, default: int) -> int:
     return value if value >= 0 else default
 
 
+def _optional_int_env(name: str) -> int | None:
+    """Read an int env var, returning `None` on missing/invalid/negative.
+
+    Mirrors `_int_env` but has no default: unset, blank, non-integer, or
+    negative values all resolve to `None` (a disabled/opt-out signal),
+    never `0` unless the env var is literally `"0"`.
+    """
+    raw = os.environ.get(name)
+    if raw is None:
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        return None
+    return value if value >= 0 else None
+
+
 def _float_env(name: str, default: float) -> float:
     """Read a float env var, failing safe to `default` on missing/invalid/negative."""
     raw = os.environ.get(name)
@@ -61,6 +78,8 @@ class Config:
     filter_keep_priority: int
     hf_min_upvotes: int
     hn_min_points: int
+    filter_hf_keep_upvotes: int | None
+    filter_hn_keep_points: int | None
 
     @classmethod
     def from_env(cls) -> Config:
@@ -86,4 +105,6 @@ class Config:
             ),
             hf_min_upvotes=_int_env("AIOBS_HF_MIN_UPVOTES", _DEFAULT_HF_MIN_UPVOTES),
             hn_min_points=_int_env("AIOBS_HN_MIN_POINTS", _DEFAULT_HN_MIN_POINTS),
+            filter_hf_keep_upvotes=_optional_int_env("AIOBS_FILTER_HF_KEEP_UPVOTES"),
+            filter_hn_keep_points=_optional_int_env("AIOBS_FILTER_HN_KEEP_POINTS"),
         )

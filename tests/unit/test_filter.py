@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 import pytest
@@ -20,7 +21,12 @@ from ai_observatory.synthesis.filter import (
 from ai_observatory.synthesis.llm import LLMError, LLMResponse
 
 
-def _config(*, filter_keep_priority: int = 1) -> Config:
+def _config(
+    *,
+    filter_keep_priority: int = 1,
+    filter_hf_keep_upvotes: int | None = None,
+    filter_hn_keep_points: int | None = None,
+) -> Config:
     return Config(
         data_dir="./data",
         db_path="data/observatory.db",
@@ -35,6 +41,8 @@ def _config(*, filter_keep_priority: int = 1) -> Config:
         filter_keep_priority=filter_keep_priority,
         hf_min_upvotes=5,
         hn_min_points=30,
+        filter_hf_keep_upvotes=filter_hf_keep_upvotes,
+        filter_hn_keep_points=filter_hn_keep_points,
     )
 
 
@@ -44,6 +52,7 @@ def _item(
     title: str = "A neutral headline",
     summary: str = "A neutral summary.",
     source_priority: int = 2,
+    raw: str = "{}",
 ) -> Item:
     return Item(
         id=id_,
@@ -55,7 +64,7 @@ def _item(
         published_at=datetime(2026, 7, 20, 12, 0, tzinfo=UTC),
         collected_at=datetime(2026, 7, 20, 12, 0, tzinfo=UTC),
         summary=summary,
-        raw="{}",
+        raw=raw,
     )
 
 
@@ -85,6 +94,164 @@ class TestScoreNoiseKeywordDrop:
         )
 
         assert score(item, _config(filter_keep_priority=1)) == Verdict.ROUTINE
+
+
+def _raw(signal_score: object, signal_scale: object) -> str:
+    return json.dumps({"signal_score": signal_score, "signal_scale": signal_scale})
+
+
+class TestScoreKeepRule:
+    def test_score_at_or_above_threshold_is_significant(self) -> None:
+        item = _item(
+            source_priority=5,
+            title="Neutral",
+            summary="Neutral",
+            raw=_raw(50, "hf_upvotes"),
+        )
+
+        verdict = score(item, _config(filter_hf_keep_upvotes=50))
+
+        assert verdict == Verdict.SIGNIFICANT
+
+    def test_score_keep_precedes_noise_keyword(self) -> None:
+        item = _item(
+            source_priority=5,
+            title="Funding round announced",
+            summary="",
+            raw=_raw(50, "hf_upvotes"),
+        )
+
+        verdict = score(item, _config(filter_hf_keep_upvotes=50))
+
+        assert verdict == Verdict.SIGNIFICANT
+
+    def test_score_below_threshold_falls_through(self) -> None:
+        item = _item(
+            source_priority=5,
+            title="Neutral",
+            summary="Neutral",
+            raw=_raw(10, "hf_upvotes"),
+        )
+
+        verdict = score(item, _config(filter_hf_keep_upvotes=50))
+
+        assert verdict is None
+
+    def test_threshold_none_never_fires(self) -> None:
+        item = _item(
+            source_priority=5,
+            title="Neutral",
+            summary="Neutral",
+            raw=_raw(9999, "hf_upvotes"),
+        )
+
+        verdict = score(item, _config(filter_hf_keep_upvotes=None))
+
+        assert verdict is None
+
+    def test_no_signal_keys_does_not_fire(self) -> None:
+        item = _item(
+            source_priority=5,
+            title="Neutral",
+            summary="Neutral",
+            raw="{}",
+        )
+
+        verdict = score(item, _config(filter_hf_keep_upvotes=1))
+
+        assert verdict is None
+
+    def test_hf_and_hn_thresholds_are_independent(self) -> None:
+        hf_item = _item(
+            id_="hf",
+            source_priority=5,
+            title="Neutral",
+            summary="Neutral",
+            raw=_raw(50, "hf_upvotes"),
+        )
+        hn_item = _item(
+            id_="hn",
+            source_priority=5,
+            title="Neutral",
+            summary="Neutral",
+            raw=_raw(200, "hn_points"),
+        )
+        config = _config(filter_hf_keep_upvotes=50, filter_hn_keep_points=None)
+
+        assert score(hf_item, config) == Verdict.SIGNIFICANT
+        assert score(hn_item, config) is None
+
+    def test_malformed_raw_does_not_raise(self) -> None:
+        item = _item(
+            source_priority=5, title="Neutral", summary="Neutral", raw="not json"
+        )
+
+        verdict = score(item, _config(filter_hf_keep_upvotes=1))
+
+        assert verdict is None
+
+    def test_non_int_signal_score_does_not_fire(self) -> None:
+        item = _item(
+            source_priority=5,
+            title="Neutral",
+            summary="Neutral",
+            raw=_raw("fifty", "hf_upvotes"),
+        )
+
+        verdict = score(item, _config(filter_hf_keep_upvotes=1))
+
+        assert verdict is None
+
+    def test_bool_signal_score_does_not_fire(self) -> None:
+        item = _item(
+            source_priority=5,
+            title="Neutral",
+            summary="Neutral",
+            raw=_raw(True, "hf_upvotes"),
+        )
+
+        verdict = score(item, _config(filter_hf_keep_upvotes=0))
+
+        assert verdict is None
+
+    def test_unknown_signal_scale_does_not_fire(self) -> None:
+        item = _item(
+            source_priority=5,
+            title="Neutral",
+            summary="Neutral",
+            raw=_raw(9999, "unknown_scale"),
+        )
+
+        verdict = score(item, _config(filter_hf_keep_upvotes=1))
+
+        assert verdict is None
+
+
+class TestClassifyItemsScoreKeep:
+    def test_score_keep_verdict_never_reaches_llm(self) -> None:
+        item = _item(
+            id_="score-keep",
+            source_priority=5,
+            title="Neutral",
+            summary="Neutral",
+            raw=_raw(50, "hf_upvotes"),
+        )
+        client = _FakeLLMClient([])
+
+        verdicts, llm_available = classify_items(
+            [item], client, _config(filter_hf_keep_upvotes=50)
+        )
+
+        assert verdicts == [
+            Significance(
+                item_id="score-keep",
+                label=Verdict.SIGNIFICANT,
+                mode=Mode.DETERMINISTIC,
+                model=None,
+            )
+        ]
+        assert llm_available is True
+        assert client.calls == 0
 
 
 class TestScoreUncertain:
