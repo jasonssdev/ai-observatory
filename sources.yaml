@@ -1,7 +1,9 @@
 # AI Observatory feed sources.
 #
-# Operational list per docs/source-selection.md: 8 P1 sources + Google (The
-# Keyword, AI) at P2, all with real RSS/Atom feeds (collector: rss). See
+# Operational list per docs/source-selection.md: P1 RSS/Atom + JSON-API
+# sources, plus a P2 tier of additional RSS/Atom feeds. `collector: hf_papers`
+# and `collector: hn_algolia` are dedicated JSON-API collectors (bespoke
+# response shapes); `collector: rss` covers every RSS/Atom feed. See
 # docs/source-selection.md for the full candidate list, priorities, and the
 # rationale for the bridge/manual tiers not included here.
 #
@@ -61,3 +63,99 @@
   url: https://www.semianalysis.com/feed
   category: news
   priority: 1
+
+- name: Hugging Face Daily Papers
+  collector: hf_papers
+  url: https://huggingface.co/api/daily_papers
+  category: research
+  priority: 1
+
+- name: Hacker News (AI)
+  collector: hn_algolia
+  url: "https://hn.algolia.com/api/v1/search_by_date?query=AI&tags=story&numericFilters=points>30"
+  category: community
+  priority: 1
+
+- name: Google Research
+  collector: rss
+  url: https://research.google/blog/rss/
+  category: research
+  priority: 2
+
+- name: Qwen
+  collector: rss
+  url: https://qwenlm.github.io/blog/index.xml
+  category: lab
+  priority: 2
+
+- name: arXiv cs.AI
+  collector: rss
+  url: https://rss.arxiv.org/rss/cs.AI
+  category: research
+  priority: 2
+
+- name: arXiv cs.CL
+  collector: rss
+  url: https://rss.arxiv.org/rss/cs.CL
+  category: research
+  priority: 2
+
+- name: Reddit r/LocalLLaMA
+  collector: rss
+  url: https://www.reddit.com/r/LocalLLaMA/.rss
+  category: community
+  priority: 2
+
+- name: Ahead of AI
+  collector: rss
+  url: https://magazine.sebastianraschka.com/feed
+  category: newsletter
+  priority: 2
+
+- name: Latent Space
+  collector: rss
+  url: https://www.latent.space/feed
+  category: newsletter
+  priority: 2
+
+- name: The Decoder
+  collector: rss
+  url: https://the-decoder.com/feed/
+  category: news
+  priority: 2
+
+- name: Ben's Bites
+  collector: rss
+  url: https://www.bensbites.com/feed
+  category: newsletter
+  priority: 2
+
+- name: VentureBeat AI
+  collector: rss
+  url: https://venturebeat.com/category/ai/feed/
+  category: news
+  priority: 2
+
+- name: TechCrunch AI
+  collector: rss
+  url: https://techcrunch.com/category/artificial-intelligence/feed/
+  category: news
+  priority: 2
+
+- name: MIT Technology Review AI
+  collector: rss
+  url: https://www.technologyreview.com/topic/artificial-intelligence/feed/
+  category: news
+  priority: 2
+
+- name: Ollama
+  collector: rss
+  url: https://ollama.com/blog/rss.xml
+  category: tooling
+  priority: 2
+
+- name: Hugging Face Blog
+  collector: rss
+  url: https://huggingface.co/blog/feed.xml
+  category: tooling
+  priority: 2

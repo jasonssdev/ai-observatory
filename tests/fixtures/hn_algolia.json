@@ -1,0 +1,25 @@
+{
+  "hits": [
+    {
+      "title": "New open-weight model released",
+      "url": "https://example.com/new-model-release",
+      "points": 145,
+      "objectID": "111111",
+      "created_at": "2026-07-20T10:15:00.000Z"
+    },
+    {
+      "title": "Ask HN: How do you evaluate LLM agents?",
+      "url": null,
+      "points": 87,
+      "objectID": "222222",
+      "created_at": "2026-07-20T11:00:00.000Z"
+    },
+    {
+      "title": "Minor tooling update discussion",
+      "url": "https://example.com/minor-update",
+      "points": 5,
+      "objectID": "333333",
+      "created_at": "2026-07-20T12:00:00.000Z"
+    }
+  ]
+}

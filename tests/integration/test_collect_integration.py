@@ -7,6 +7,7 @@ single stored row and a single rendered Markdown line.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -15,6 +16,8 @@ import pytest
 from ai_observatory.cli import _write_daily_records, collect
 from ai_observatory.collection.base import Source
 from ai_observatory.collection.dedup import dedup_batch
+from ai_observatory.collection.hf_papers import HfPapersCollector
+from ai_observatory.collection.hn_algolia import HnAlgoliaCollector
 from ai_observatory.collection.rss import RssCollector
 from ai_observatory.storage import db, records
 from ai_observatory.storage.models import Item
@@ -203,6 +206,162 @@ class _FixedToday(datetime):
     @classmethod
     def now(cls, tz=None):  # noqa: ANN001 - matches datetime.now signature
         return datetime(2026, 7, 20, 12, 0, tzinfo=tz)
+
+
+class _MultiSourceFetcher:
+    """Serves a fixture by URL, isolating unrecognized URLs to a failure."""
+
+    def __init__(self, *, user_agent: str) -> None:
+        self.user_agent = user_agent
+
+    def get(self, url: str) -> bytes:
+        if "huggingface.co/api/daily_papers" in url:
+            return (FIXTURES_DIR / "hf_daily_papers.json").read_bytes()
+        if "hn.algolia.com" in url:
+            return (FIXTURES_DIR / "hn_algolia.json").read_bytes()
+        if "example.com/feed.xml" in url:
+            return (FIXTURES_DIR / "feed_valid.xml").read_bytes()
+        raise ValueError(f"unexpected URL in test: {url}")
+
+
+class TestCollectorDispatch:
+    def test_each_source_routes_to_its_matching_collector(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        sources_path = tmp_path / "sources.yaml"
+        sources_path.write_text(
+            "- name: RSS Source\n"
+            "  collector: rss\n"
+            "  url: https://example.com/feed.xml\n"
+            "  category: lab\n"
+            "  priority: 1\n"
+            "- name: Hugging Face Daily Papers\n"
+            "  collector: hf_papers\n"
+            "  url: https://huggingface.co/api/daily_papers\n"
+            "  category: research\n"
+            "  priority: 1\n"
+            "- name: Hacker News (AI)\n"
+            "  collector: hn_algolia\n"
+            "  url: https://hn.algolia.com/api/v1/search_by_date\n"
+            "  category: community\n"
+            "  priority: 1\n"
+            "- name: Unsupported Source\n"
+            "  collector: apify\n"
+            "  url: https://example.com/unsupported\n"
+            "  category: news\n"
+            "  priority: 3\n",
+            encoding="utf-8",
+        )
+        records_dir = tmp_path / "records"
+        db_path = tmp_path / "observatory.db"
+
+        monkeypatch.setenv("AIOBS_SOURCES_PATH", str(sources_path))
+        monkeypatch.setenv("AIOBS_RECORDS_DIR", str(records_dir))
+        monkeypatch.setenv("AIOBS_DB_PATH", str(db_path))
+        monkeypatch.setattr("ai_observatory.cli.HttpxFetcher", _MultiSourceFetcher)
+        monkeypatch.setattr("ai_observatory.cli.OllamaClient", _FakeOllamaClient)
+        monkeypatch.setattr("ai_observatory.cli.datetime", _FixedToday)
+
+        # Unknown-collector source must be logged and skipped, never fatal.
+        collect()
+
+        connection = db.connect(str(db_path))
+        try:
+            rows = connection.execute("SELECT source FROM items").fetchall()
+        finally:
+            connection.close()
+        sources_seen = {row[0] for row in rows}
+
+        assert "RSS Source" in sources_seen
+        assert "Hugging Face Daily Papers" in sources_seen
+        assert "Hacker News (AI)" in sources_seen
+        assert "Unsupported Source" not in sources_seen
+
+
+class TestJsonRssDedupCompatibility:
+    def test_hn_item_and_rss_item_sharing_canonical_url_dedup_to_one(self) -> None:
+        rss_source = Source(
+            name="RSS Source",
+            collector="rss",
+            url="https://a.example.com/feed.xml",
+            category="lab",
+            priority=1,
+        )
+        hn_source = Source(
+            name="Hacker News (AI)",
+            collector="hn_algolia",
+            url="https://hn.algolia.com/api/v1/search_by_date",
+            category="community",
+            priority=2,
+        )
+
+        rss_collector = RssCollector(
+            _StaticFetcher((FIXTURES_DIR / "feed_valid.xml").read_bytes()),
+            summary_max_chars=500,
+        )
+        # HN fixture's first hit resolves to the same external URL as the
+        # RSS feed's first entry, so both must collapse to one item.
+        hn_fixture = (FIXTURES_DIR / "hn_algolia.json").read_text(encoding="utf-8")
+        hn_fixture = hn_fixture.replace(
+            "https://example.com/new-model-release",
+            "https://example.com/articles/first-item",
+        )
+        hn_collector = HnAlgoliaCollector(
+            _StaticFetcher(hn_fixture.encode("utf-8")),
+            summary_max_chars=500,
+            min_points=30,
+        )
+
+        collected = rss_collector.collect(rss_source) + hn_collector.collect(hn_source)
+        deduped = dedup_batch(collected)
+
+        matching_ids = {
+            item.id
+            for item in deduped
+            if item.url == "https://example.com/articles/first-item"
+        }
+        assert len(matching_ids) == 1
+
+    def test_hf_item_dedups_against_equivalent_title_rss_item(self) -> None:
+        # RSS fixture's first entry is titled "First Item"; the HF fixture is
+        # rewritten to the same normalized title but a distinct canonical
+        # URL, so only title-hash collision (not URL identity) can collapse
+        # them. HF is P1, RSS is P2: HF must win the priority tie-break.
+        rss_source = Source(
+            name="RSS Source",
+            collector="rss",
+            url="https://a.example.com/feed.xml",
+            category="lab",
+            priority=2,
+        )
+        hf_source = Source(
+            name="Hugging Face Daily Papers",
+            collector="hf_papers",
+            url="https://huggingface.co/api/daily_papers",
+            category="research",
+            priority=1,
+        )
+
+        rss_collector = RssCollector(
+            _StaticFetcher((FIXTURES_DIR / "feed_valid.xml").read_bytes()),
+            summary_max_chars=500,
+        )
+        hf_fixture = json.loads(
+            (FIXTURES_DIR / "hf_daily_papers.json").read_text(encoding="utf-8")
+        )
+        hf_fixture[0]["title"] = "First Item"
+        hf_collector = HfPapersCollector(
+            _StaticFetcher(json.dumps(hf_fixture).encode("utf-8")),
+            summary_max_chars=500,
+            min_upvotes=5,
+        )
+
+        collected = rss_collector.collect(rss_source) + hf_collector.collect(hf_source)
+        deduped = dedup_batch(collected)
+
+        matching = [item for item in deduped if item.title == "First Item"]
+        assert len(matching) == 1
+        assert matching[0].source == "Hugging Face Daily Papers"
 
 
 class TestCollectEndToEnd:

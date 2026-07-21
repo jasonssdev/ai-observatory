@@ -9,7 +9,10 @@ from pathlib import Path
 
 import typer
 
+from ai_observatory.collection.base import Collector
 from ai_observatory.collection.dedup import dedup_batch
+from ai_observatory.collection.hf_papers import HfPapersCollector
+from ai_observatory.collection.hn_algolia import HnAlgoliaCollector
 from ai_observatory.collection.rss import HttpxFetcher, RssCollector
 from ai_observatory.collection.sources import load_sources
 from ai_observatory.config import Config
@@ -71,10 +74,26 @@ def collect() -> None:
     sources = load_sources(config.sources_path)
 
     fetcher = HttpxFetcher(user_agent=config.user_agent)
-    collector = RssCollector(fetcher, config.summary_max_chars)
+    collectors: dict[str, Collector] = {
+        "rss": RssCollector(fetcher, config.summary_max_chars),
+        "hf_papers": HfPapersCollector(
+            fetcher, config.summary_max_chars, config.hf_min_upvotes
+        ),
+        "hn_algolia": HnAlgoliaCollector(
+            fetcher, config.summary_max_chars, config.hn_min_points
+        ),
+    }
 
     collected_items = []
     for source in sources:
+        collector = collectors.get(source.collector)
+        if collector is None:
+            logger.warning(
+                "Skipping source %s: unknown collector %r",
+                source.name,
+                source.collector,
+            )
+            continue
         collected_items.extend(collector.collect(source))
 
     deduped_items = dedup_batch(collected_items)

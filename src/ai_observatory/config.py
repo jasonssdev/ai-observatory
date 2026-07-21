@@ -18,6 +18,8 @@ _DEFAULT_OLLAMA_URL = "http://localhost:11434"
 _DEFAULT_OLLAMA_MODEL = "llama3.2"
 _DEFAULT_OLLAMA_TIMEOUT_SECONDS = 60.0
 _DEFAULT_FILTER_KEEP_PRIORITY = 1
+_DEFAULT_HF_MIN_UPVOTES = 5
+_DEFAULT_HN_MIN_POINTS = 30
 
 
 def _int_env(name: str, default: int) -> int:
@@ -57,6 +59,8 @@ class Config:
     ollama_model: str
     ollama_timeout_seconds: float
     filter_keep_priority: int
+    hf_min_upvotes: int
+    hn_min_points: int
 
     @classmethod
     def from_env(cls) -> Config:
@@ -80,4 +84,6 @@ class Config:
             filter_keep_priority=_int_env(
                 "AIOBS_FILTER_KEEP_PRIORITY", _DEFAULT_FILTER_KEEP_PRIORITY
             ),
+            hf_min_upvotes=_int_env("AIOBS_HF_MIN_UPVOTES", _DEFAULT_HF_MIN_UPVOTES),
+            hn_min_points=_int_env("AIOBS_HN_MIN_POINTS", _DEFAULT_HN_MIN_POINTS),
         )

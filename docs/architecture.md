@@ -108,7 +108,9 @@ class Collector(Protocol):
 
 | Collector | Handles | Default | Notes |
 | --- | --- | --- | --- |
-| `RssCollector` | RSS/Atom feeds and JSON APIs (HF Daily Papers, HN Algolia, models.dev) | **on** | The engine. Covers ~28 sources in [source-selection.md](source-selection.md) with no cost or auth. |
+| `RssCollector` | RSS/Atom feeds | **on** | The engine. Covers most sources in [source-selection.md](source-selection.md) with no cost or auth. |
+| `HfPapersCollector` | Hugging Face Daily Papers JSON API | **on** | Dedicated collector: nested `paper.upvotes` scoring, canonical `https://huggingface.co/papers/{id}` URLs. Thresholded by `AIOBS_HF_MIN_UPVOTES`. |
+| `HnAlgoliaCollector` | Hacker News Algolia JSON API | **on** | Dedicated collector: external `url` when present, discussion permalink fallback otherwise. Thresholded by `AIOBS_HN_MIN_POINTS`. |
 | `RsshubCollector` | Official blogs with no RSS (Anthropic, Meta, Mistral, xAI, DeepSeek, The Batch) via a self-hosted RSSHub instance | optional | Local Docker; fits local-first. Anthropic is the top bridge priority. |
 | `ApifyCollector` | X/Twitter accounts (zero-latency layer) via the Apify API | **off** | Paid cloud, pay-per-result. Scoped to a small curated account list. Kept behind the same interface so the system runs fine without it. |
 
@@ -121,7 +123,7 @@ Sources live in `sources.yaml`, not in code, so adding coverage is a config edit
   category: lab
   priority: 1
 - name: Hugging Face Daily Papers
-  collector: rss           # JSON API handled by the same collector
+  collector: hf_papers      # dedicated JSON-API collector
   url: https://huggingface.co/api/daily_papers
   category: research
   priority: 1
