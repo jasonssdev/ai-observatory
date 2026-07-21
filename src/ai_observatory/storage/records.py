@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from ai_observatory.storage.models import Item
@@ -15,6 +15,21 @@ _CATEGORY_ORDER = [
     "tooling",
     "community",
 ]
+
+
+def dates_within_window(
+    candidate_dates: set[date], today: date, window_days: int
+) -> set[date]:
+    """Return the subset of `candidate_dates` within `window_days` of `today`.
+
+    Keeps every date `d` where `(today - window_days) <= d <= today`.
+    `today` is always included in the result, even if absent from
+    `candidate_dates`. Dates after `today` (future-dated) are excluded.
+    """
+    earliest = today - timedelta(days=window_days)
+    kept = {d for d in candidate_dates if earliest <= d <= today}
+    kept.add(today)
+    return kept
 
 
 def _sort_key(item: Item) -> tuple[int, float]:
