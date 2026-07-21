@@ -8,7 +8,11 @@ from pathlib import Path
 import pytest
 
 from ai_observatory.storage.models import Item
-from ai_observatory.storage.records import render_markdown, write_record
+from ai_observatory.storage.records import (
+    dates_within_window,
+    render_markdown,
+    write_record,
+)
 
 
 def _utc(*args: int) -> datetime:
@@ -167,6 +171,55 @@ class TestWriteRecord:
         content = path.read_text(encoding="utf-8")
         assert content.count("Prior Item") == 1
         assert content.count("New Item") == 1
+
+
+class TestDatesWithinWindow:
+    _TODAY = date(2026, 7, 20)
+
+    def test_date_inside_window_is_kept(self) -> None:
+        inside = date(2026, 7, 15)
+
+        result = dates_within_window({inside}, self._TODAY, window_days=7)
+
+        assert inside in result
+
+    def test_lower_boundary_today_minus_window_is_kept(self) -> None:
+        boundary = date(2026, 7, 13)  # today - 7 days
+
+        result = dates_within_window({boundary}, self._TODAY, window_days=7)
+
+        assert boundary in result
+
+    def test_just_outside_lower_boundary_is_excluded(self) -> None:
+        just_outside = date(2026, 7, 12)  # today - 8 days
+
+        result = dates_within_window({just_outside}, self._TODAY, window_days=7)
+
+        assert just_outside not in result
+
+    def test_window_of_zero_keeps_only_today(self) -> None:
+        candidates = {date(2026, 7, 19), date(2026, 7, 20), date(2026, 7, 21)}
+
+        result = dates_within_window(candidates, self._TODAY, window_days=0)
+
+        assert result == {self._TODAY}
+
+    def test_today_is_always_included_even_if_absent_from_candidates(self) -> None:
+        result = dates_within_window(set(), self._TODAY, window_days=7)
+
+        assert self._TODAY in result
+
+    def test_future_dated_candidate_is_excluded(self) -> None:
+        future = date(2026, 7, 21)  # today + 1 day
+
+        result = dates_within_window({future}, self._TODAY, window_days=7)
+
+        assert future not in result
+
+    def test_empty_candidates_returns_only_today(self) -> None:
+        result = dates_within_window(set(), self._TODAY, window_days=7)
+
+        assert result == {self._TODAY}
 
 
 if __name__ == "__main__":

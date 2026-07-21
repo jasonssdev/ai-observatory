@@ -12,6 +12,19 @@ _DEFAULT_SOURCES_PATH = "./sources.yaml"
 _DEFAULT_USER_AGENT = (
     "ai-observatory/0.1 (+https://github.com/jasonssdev/ai-observatory)"
 )
+_DEFAULT_RECORD_WINDOW_DAYS = 7
+
+
+def _int_env(name: str, default: int) -> int:
+    """Read an int env var, failing safe to `default` on missing/invalid/negative."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value >= 0 else default
 
 
 @dataclass(frozen=True)
@@ -21,6 +34,7 @@ class Config:
     records_dir: str
     sources_path: str
     user_agent: str
+    record_window_days: int
 
     @classmethod
     def from_env(cls) -> Config:
@@ -30,4 +44,7 @@ class Config:
             records_dir=os.environ.get("AIOBS_RECORDS_DIR", _DEFAULT_RECORDS_DIR),
             sources_path=os.environ.get("AIOBS_SOURCES_PATH", _DEFAULT_SOURCES_PATH),
             user_agent=os.environ.get("AIOBS_USER_AGENT", _DEFAULT_USER_AGENT),
+            record_window_days=_int_env(
+                "AIOBS_RECORD_WINDOW_DAYS", _DEFAULT_RECORD_WINDOW_DAYS
+            ),
         )

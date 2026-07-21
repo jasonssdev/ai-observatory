@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+import sqlite3
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import typer
@@ -22,6 +23,27 @@ app = typer.Typer()
 @app.callback()
 def callback() -> None:
     """AI Observatory: local-first AI news collection."""
+
+
+def _write_daily_records(
+    connection: sqlite3.Connection,
+    records_dir: Path | str,
+    candidate_dates: set[date],
+    today: date,
+    window_days: int,
+) -> None:
+    """Render and write Markdown records for dates within the recent window.
+
+    Filters `candidate_dates` down to those within `window_days` of `today`
+    (always including `today`), then regenerates one Markdown file per kept
+    date from the current DB contents.
+    """
+    kept_dates = records.dates_within_window(candidate_dates, today, window_days)
+    for target_date in kept_dates:
+        day_items = db.items_for_date(connection, target_date)
+        content = records.render_markdown(day_items, target_date)
+        record_path = Path(records_dir) / f"{target_date.isoformat()}.md"
+        records.write_record(record_path, content)
 
 
 @app.command()
@@ -43,13 +65,16 @@ def collect() -> None:
     try:
         db.upsert_items(connection, deduped_items)
 
-        affected_dates = {item.published_at.date() for item in deduped_items}
-        affected_dates.add(datetime.now(UTC).date())
+        today = datetime.now(UTC).date()
+        candidate_dates = {item.published_at.date() for item in deduped_items}
+        candidate_dates.add(today)
 
-        for target_date in affected_dates:
-            day_items = db.items_for_date(connection, target_date)
-            content = records.render_markdown(day_items, target_date)
-            record_path = Path(config.records_dir) / f"{target_date.isoformat()}.md"
-            records.write_record(record_path, content)
+        _write_daily_records(
+            connection,
+            config.records_dir,
+            candidate_dates,
+            today,
+            config.record_window_days,
+        )
     finally:
         connection.close()
