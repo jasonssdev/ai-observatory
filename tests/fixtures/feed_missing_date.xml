@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>No Date Feed</title>
+    <link>https://example.com</link>
+    <description>Fixture feed whose single item has no pubDate.</description>
+    <item>
+      <title>Dateless Item</title>
+      <link>https://example.com/articles/dateless-item</link>
+      <description>No pubDate here — should default to collected_at.</description>
+    </item>
+  </channel>
+</rss>

@@ -1,2 +1,5 @@
+from ai_observatory import cli
+
+
 def main() -> None:
-    print("Hello from ai-observatory!")
+    cli.app()
