@@ -14,6 +14,9 @@ _DEFAULT_USER_AGENT = (
 )
 _DEFAULT_RECORD_WINDOW_DAYS = 7
 _DEFAULT_SUMMARY_MAX_CHARS = 500
+_DEFAULT_OLLAMA_URL = "http://localhost:11434"
+_DEFAULT_OLLAMA_MODEL = "llama3.2"
+_DEFAULT_OLLAMA_TIMEOUT_SECONDS = 60.0
 
 
 def _int_env(name: str, default: int) -> int:
@@ -28,6 +31,18 @@ def _int_env(name: str, default: int) -> int:
     return value if value >= 0 else default
 
 
+def _float_env(name: str, default: float) -> float:
+    """Read a float env var, failing safe to `default` on missing/invalid/negative."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if value >= 0 else default
+
+
 @dataclass(frozen=True)
 class Config:
     data_dir: str
@@ -37,6 +52,9 @@ class Config:
     user_agent: str
     record_window_days: int
     summary_max_chars: int
+    ollama_url: str
+    ollama_model: str
+    ollama_timeout_seconds: float
 
     @classmethod
     def from_env(cls) -> Config:
@@ -51,5 +69,10 @@ class Config:
             ),
             summary_max_chars=_int_env(
                 "AIOBS_SUMMARY_MAX_CHARS", _DEFAULT_SUMMARY_MAX_CHARS
+            ),
+            ollama_url=os.environ.get("AIOBS_OLLAMA_URL", _DEFAULT_OLLAMA_URL),
+            ollama_model=os.environ.get("AIOBS_OLLAMA_MODEL", _DEFAULT_OLLAMA_MODEL),
+            ollama_timeout_seconds=_float_env(
+                "AIOBS_OLLAMA_TIMEOUT_SECONDS", _DEFAULT_OLLAMA_TIMEOUT_SECONDS
             ),
         )

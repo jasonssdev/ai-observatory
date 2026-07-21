@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai_observatory.config import Config
+from ai_observatory.config import Config, _float_env
 
 
 class TestConfigDefaultsAndOverrides:
@@ -106,6 +106,55 @@ class TestSummaryMaxChars:
         config = Config.from_env()
 
         assert config.summary_max_chars == 0
+
+
+class TestFloatEnv:
+    def test_unset_returns_default(self, monkeypatch) -> None:
+        monkeypatch.delenv("AIOBS_TEST_FLOAT", raising=False)
+
+        assert _float_env("AIOBS_TEST_FLOAT", 60.0) == 60.0
+
+    def test_valid_override_takes_effect(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_TEST_FLOAT", "12.5")
+
+        assert _float_env("AIOBS_TEST_FLOAT", 60.0) == 12.5
+
+    def test_invalid_string_falls_back_to_default(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_TEST_FLOAT", "abc")
+
+        assert _float_env("AIOBS_TEST_FLOAT", 60.0) == 60.0
+
+    def test_negative_value_falls_back_to_default(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_TEST_FLOAT", "-1.0")
+
+        assert _float_env("AIOBS_TEST_FLOAT", 60.0) == 60.0
+
+
+class TestOllamaSettings:
+    def test_no_env_vars_uses_hardcoded_defaults(self, monkeypatch) -> None:
+        for name in (
+            "AIOBS_OLLAMA_URL",
+            "AIOBS_OLLAMA_MODEL",
+            "AIOBS_OLLAMA_TIMEOUT_SECONDS",
+        ):
+            monkeypatch.delenv(name, raising=False)
+
+        config = Config.from_env()
+
+        assert config.ollama_url == "http://localhost:11434"
+        assert config.ollama_model == "llama3.2"
+        assert config.ollama_timeout_seconds == 60.0
+
+    def test_env_overrides_take_effect(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_OLLAMA_URL", "http://ollama-host:9999")
+        monkeypatch.setenv("AIOBS_OLLAMA_MODEL", "mistral")
+        monkeypatch.setenv("AIOBS_OLLAMA_TIMEOUT_SECONDS", "30.0")
+
+        config = Config.from_env()
+
+        assert config.ollama_url == "http://ollama-host:9999"
+        assert config.ollama_model == "mistral"
+        assert config.ollama_timeout_seconds == 30.0
 
 
 if __name__ == "__main__":
