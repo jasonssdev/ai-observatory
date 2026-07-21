@@ -1,0 +1,63 @@
+# AI Observatory feed sources.
+#
+# Operational list per docs/source-selection.md: 8 P1 sources + Google (The
+# Keyword, AI) at P2, all with real RSS/Atom feeds (collector: rss). See
+# docs/source-selection.md for the full candidate list, priorities, and the
+# rationale for the bridge/manual tiers not included here.
+#
+# category values follow the daily-record grouping order: lab, research,
+# newsletter, news, tooling, community.
+
+- name: OpenAI
+  collector: rss
+  url: https://openai.com/news/rss.xml
+  category: lab
+  priority: 1
+
+- name: Google DeepMind
+  collector: rss
+  url: https://deepmind.google/blog/rss.xml
+  category: lab
+  priority: 1
+
+- name: Google (The Keyword, AI)
+  collector: rss
+  url: https://blog.google/technology/ai/rss/
+  category: lab
+  priority: 2
+
+- name: Import AI
+  collector: rss
+  url: https://importai.substack.com/feed
+  category: newsletter
+  priority: 1
+
+- name: Last Week in AI
+  collector: rss
+  url: https://lastweekin.ai/feed
+  category: newsletter
+  priority: 1
+
+- name: Interconnects
+  collector: rss
+  url: https://www.interconnects.ai/feed
+  category: newsletter
+  priority: 1
+
+- name: Simon Willison
+  collector: rss
+  url: https://simonwillison.net/atom/everything/
+  category: newsletter
+  priority: 1
+
+- name: TLDR AI
+  collector: rss
+  url: https://tldr.tech/api/rss/ai
+  category: newsletter
+  priority: 1
+
+- name: Semianalysis
+  collector: rss
+  url: https://www.semianalysis.com/feed
+  category: news
+  priority: 1
