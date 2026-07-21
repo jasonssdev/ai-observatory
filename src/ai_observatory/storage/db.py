@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import date, datetime
+from pathlib import Path
 
 from ai_observatory.collection.dedup import canonicalize_url, title_hash
 from ai_observatory.storage.models import Item
@@ -40,6 +41,8 @@ _INSERT_COLUMNS = (
 
 def connect(path: str) -> sqlite3.Connection:
     """Open a connection and ensure the schema exists (idempotent)."""
+    if path != ":memory:":
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path)
     connection.executescript(_SCHEMA)
     connection.commit()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import UTC, date, datetime
+from pathlib import Path
 
 import pytest
 
@@ -69,6 +70,17 @@ class TestSchema:
         assert "items" in tables
         assert "idx_published_at" in indexes
         assert "idx_source_priority" in indexes
+
+
+class TestConnectCreatesParentDir:
+    def test_connect_creates_missing_parent_dir(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "data" / "observatory.db"
+
+        connection = db.connect(str(db_path))
+        try:
+            assert db_path.exists()
+        finally:
+            connection.close()
 
 
 class TestUpsertItems:
