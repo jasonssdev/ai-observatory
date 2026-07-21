@@ -251,3 +251,4 @@ $RECYCLE.BIN/
 # Local AI runtime state (machine-local, never shared across checkouts)
 .atl/
 .codegraph/
+data/
