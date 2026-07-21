@@ -37,14 +37,26 @@ def _sort_key(item: Item) -> tuple[int, float]:
     return (item.source_priority, -item.published_at.timestamp())
 
 
-def render_markdown(items: list[Item], target_date: date) -> str:
-    """Render the full Markdown record for `target_date` from `items`.
+def _item_line(item: Item) -> str:
+    time_label = item.published_at.strftime("%H:%M UTC")
+    return (
+        f"- [{item.title}]({item.url}) — {item.source} "
+        f"(P{item.source_priority}) · {time_label}"
+    )
 
-    Groups by category (fixed order, then any unknown categories sorted
-    lexically), and within each group sorts by source priority ascending
-    then published_at descending.
-    """
-    lines = [f"# {target_date.isoformat()} ({len(items)} items)", ""]
+
+def _mode_suffix(mode: str) -> str:
+    if mode == "hybrid":
+        return "(filter: hybrid)"
+    return "(filter: deterministic-only — LLM unavailable)"
+
+
+def _render_significant_section(items: list[Item]) -> list[str]:
+    lines = ["## Significant", ""]
+    if not items:
+        lines.append("_(none)_")
+        lines.append("")
+        return lines
 
     grouped: dict[str, list[Item]] = {}
     for item in items:
@@ -58,15 +70,45 @@ def render_markdown(items: list[Item], target_date: date) -> str:
         lines.append(f"## {category.capitalize()}")
         lines.append("")
         for item in sorted(grouped[category], key=_sort_key):
-            time_label = item.published_at.strftime("%H:%M UTC")
-            line = (
-                f"- [{item.title}]({item.url}) — {item.source} "
-                f"(P{item.source_priority}) · {time_label}"
-            )
-            lines.append(line)
+            lines.append(_item_line(item))
             if item.summary:
                 lines.append(f"  {item.summary}")
         lines.append("")
+
+    return lines
+
+
+def _render_set_aside_section(items: list[Item]) -> list[str]:
+    lines = ["## Set aside", ""]
+    if not items:
+        lines.append("_(none)_")
+        lines.append("")
+        return lines
+
+    for item in sorted(items, key=_sort_key):
+        lines.append(_item_line(item))
+    lines.append("")
+    return lines
+
+
+def render_markdown(
+    significant: list[Item], set_aside: list[Item], target_date: date, mode: str
+) -> str:
+    """Render the full Markdown record for `target_date` from two buckets.
+
+    `## Significant` keeps the existing category grouping and priority
+    sort. `## Set aside` renders a compact list (no summary), not grouped
+    by category. Both sections always render, even when empty (with a
+    `_(none)_` placeholder). The header states the date, the combined
+    item count, and the run's filter mode.
+    """
+    total = len(significant) + len(set_aside)
+    lines = [
+        f"# {target_date.isoformat()} ({total} items) {_mode_suffix(mode)}",
+        "",
+    ]
+    lines.extend(_render_significant_section(significant))
+    lines.extend(_render_set_aside_section(set_aside))
 
     return "\n".join(lines).rstrip() + "\n"
 
