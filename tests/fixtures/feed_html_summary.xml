@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>HTML Summary Feed</title>
+  <link href="https://example.com"/>
+  <entry>
+    <title>HTML Item</title>
+    <link href="https://example.com/articles/html-item"/>
+    <published>2026-07-20T14:05:00Z</published>
+    <summary type="html">&lt;p&gt;Real &amp;amp; important summary text here.&lt;/p&gt;&lt;p&gt;Tags: ai, ml&lt;/p&gt;&lt;p&gt;Via: example.com&lt;/p&gt;</summary>
+  </entry>
+</feed>

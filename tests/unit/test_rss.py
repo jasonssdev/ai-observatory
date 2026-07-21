@@ -25,29 +25,58 @@ def _fixture_bytes(name: str) -> bytes:
 
 class TestParseFeed:
     def test_well_formed_feed_parses_entries_with_title_and_url(self) -> None:
-        items = parse_feed(_fixture_bytes("feed_valid.xml"))
+        items = parse_feed(_fixture_bytes("feed_valid.xml"), 500)
 
         assert len(items) == 2
         assert items[0].title == "First Item"
         assert items[0].url.startswith("https://example.com/articles/first-item")
         assert items[1].title == "Second Item"
+        # Regression guard: normalization must not alter an already-short,
+        # tag-free, single-paragraph summary.
         assert items[1].summary == "Summary of the second item."
 
     def test_malformed_feed_yields_zero_entries_without_raising(self) -> None:
-        items = parse_feed(_fixture_bytes("feed_malformed.xml"))
+        items = parse_feed(_fixture_bytes("feed_malformed.xml"), 500)
         assert items == []
 
     def test_missing_published_date_defaults_to_collected_at(self) -> None:
-        items = parse_feed(_fixture_bytes("feed_missing_date.xml"))
+        items = parse_feed(_fixture_bytes("feed_missing_date.xml"), 500)
 
         assert len(items) == 1
         assert items[0].published_at == items[0].collected_at
 
     def test_non_zero_offset_pub_date_converts_to_correct_utc(self) -> None:
-        items = parse_feed(_fixture_bytes("feed_offset_date.xml"))
+        items = parse_feed(_fixture_bytes("feed_offset_date.xml"), 500)
 
         assert len(items) == 1
         assert items[0].published_at == datetime(2026, 7, 20, 14, 5, tzinfo=UTC)
+
+    def test_html_summary_is_stripped_decoded_and_first_paragraph_only(self) -> None:
+        items = parse_feed(_fixture_bytes("feed_html_summary.xml"), 500)
+
+        assert len(items) == 1
+        assert items[0].summary == "Real & important summary text here."
+
+    def test_missing_description_yields_empty_summary(self) -> None:
+        items = parse_feed(_fixture_bytes("feed_empty_summary.xml"), 500)
+
+        assert len(items) == 1
+        assert items[0].summary == ""
+
+    def test_long_summary_is_truncated_with_ellipsis(self) -> None:
+        items = parse_feed(_fixture_bytes("feed_long_summary.xml"), 30)
+
+        assert len(items) == 1
+        assert items[0].summary.endswith("…")
+        assert len(items[0].summary) <= 30
+        assert "second paragraph" not in items[0].summary
+
+    def test_zero_max_chars_yields_empty_summary(self) -> None:
+        items = parse_feed(_fixture_bytes("feed_valid.xml"), 0)
+
+        assert len(items) == 2
+        assert items[0].summary == ""
+        assert items[1].summary == ""
 
 
 class TestHttpxFetcher:
@@ -107,7 +136,7 @@ class TestRssCollectorIsolation:
             def get(self, url: str) -> bytes:
                 raise httpx.ConnectError("boom", request=httpx.Request("GET", url))
 
-        collector = RssCollector(RaisingFetcher())
+        collector = RssCollector(RaisingFetcher(), summary_max_chars=500)
 
         result = collector.collect(self._source())
 
@@ -118,7 +147,7 @@ class TestRssCollectorIsolation:
             def get(self, url: str) -> bytes:
                 return _fixture_bytes("feed_valid.xml")
 
-        collector = RssCollector(StaticFetcher())
+        collector = RssCollector(StaticFetcher(), summary_max_chars=500)
         source = self._source()
 
         result = collector.collect(source)

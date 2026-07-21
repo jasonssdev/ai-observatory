@@ -53,7 +53,7 @@ def collect() -> None:
     sources = load_sources(config.sources_path)
 
     fetcher = HttpxFetcher(user_agent=config.user_agent)
-    collector = RssCollector(fetcher)
+    collector = RssCollector(fetcher, config.summary_max_chars)
 
     collected_items = []
     for source in sources:

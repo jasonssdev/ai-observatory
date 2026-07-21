@@ -66,8 +66,12 @@ class TestCollectPipelineDeduplication:
             priority=2,
         )
 
-        collector_a = RssCollector(_StaticFetcher(shared_feed_bytes))
-        collector_b = RssCollector(_StaticFetcher(shared_feed_bytes))
+        collector_a = RssCollector(
+            _StaticFetcher(shared_feed_bytes), summary_max_chars=500
+        )
+        collector_b = RssCollector(
+            _StaticFetcher(shared_feed_bytes), summary_max_chars=500
+        )
 
         collected = collector_a.collect(source_a) + collector_b.collect(source_b)
         # Same feed bytes from both sources -> identical urls -> identical
