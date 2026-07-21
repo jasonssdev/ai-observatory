@@ -66,6 +66,23 @@ class TestHttpxFetcher:
         assert content == b"<rss><channel></channel></rss>"
         assert captured_headers["user-agent"] == "ai-observatory-test/1.0"
 
+    def test_fetch_follows_redirects_to_final_body(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/feed.xml":
+                return httpx.Response(
+                    301, headers={"Location": "https://example.com/final.xml"}
+                )
+            return httpx.Response(200, content=b"<rss>final</rss>")
+
+        # Client left at its default follow_redirects=False: only a per-request
+        # follow_redirects=True in our code can make this reach the 200 body.
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        fetcher = HttpxFetcher(user_agent="ai-observatory-test/1.0", client=client)
+
+        content = fetcher.get("https://example.com/feed.xml")
+
+        assert content == b"<rss>final</rss>"
+
     def test_fetch_rejects_response_exceeding_max_size(self) -> None:
         oversized_body = b"a" * (_MAX_RESPONSE_BYTES + 1)
 

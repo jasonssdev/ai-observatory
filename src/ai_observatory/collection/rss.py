@@ -74,13 +74,15 @@ class HttpxFetcher:
     def get(self, url: str) -> bytes:
         headers = {"User-Agent": self._user_agent}
         if self._client is not None:
-            with self._client.stream("GET", url, headers=headers) as response:
+            with self._client.stream(
+                "GET", url, headers=headers, follow_redirects=True
+            ) as response:
                 response.raise_for_status()
                 return _read_capped(response)
 
         with (
             httpx.Client(headers=headers, timeout=self._timeout) as client,
-            client.stream("GET", url) as response,
+            client.stream("GET", url, follow_redirects=True) as response,
         ):
             response.raise_for_status()
             return _read_capped(response)
