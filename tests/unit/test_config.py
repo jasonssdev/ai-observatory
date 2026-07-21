@@ -71,5 +71,42 @@ class TestRecordWindowDays:
         assert config.record_window_days == 7
 
 
+class TestSummaryMaxChars:
+    def test_unset_defaults_to_five_hundred(self, monkeypatch) -> None:
+        monkeypatch.delenv("AIOBS_SUMMARY_MAX_CHARS", raising=False)
+
+        config = Config.from_env()
+
+        assert config.summary_max_chars == 500
+
+    def test_env_override_takes_effect(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_SUMMARY_MAX_CHARS", "250")
+
+        config = Config.from_env()
+
+        assert config.summary_max_chars == 250
+
+    def test_non_integer_value_falls_back_to_five_hundred(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_SUMMARY_MAX_CHARS", "abc")
+
+        config = Config.from_env()
+
+        assert config.summary_max_chars == 500
+
+    def test_negative_value_falls_back_to_five_hundred(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_SUMMARY_MAX_CHARS", "-5")
+
+        config = Config.from_env()
+
+        assert config.summary_max_chars == 500
+
+    def test_zero_is_a_valid_value(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_SUMMARY_MAX_CHARS", "0")
+
+        config = Config.from_env()
+
+        assert config.summary_max_chars == 0
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

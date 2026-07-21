@@ -14,6 +14,7 @@ import httpx
 
 from ai_observatory.collection.base import Source
 from ai_observatory.collection.dedup import canonicalize_url, item_id
+from ai_observatory.collection.text import normalize_summary
 from ai_observatory.storage.models import Item
 
 logger = logging.getLogger(__name__)
@@ -104,13 +105,14 @@ def _normalize_published_at(entry: Any, default: datetime) -> datetime:
         return default
 
 
-def parse_feed(data: bytes) -> list[Item]:
+def parse_feed(data: bytes, max_chars: int) -> list[Item]:
     """Parse raw feed bytes into normalized items.
 
     Source-specific fields (source, source_priority, category) are left
     blank here; `RssCollector` fills them in from the `Source` config after
     fetching. Never raises: malformed bytes yield zero entries (feedparser
-    itself never raises on parse errors).
+    itself never raises on parse errors). `summary` is normalized to plain
+    text capped at `max_chars`; `raw` keeps the complete, unmodified entry.
     """
     parsed = feedparser.parse(data)
     if parsed.bozo and not parsed.entries:
@@ -136,7 +138,7 @@ def parse_feed(data: bytes) -> list[Item]:
                 category="",
                 published_at=_normalize_published_at(entry, now),
                 collected_at=now,
-                summary=summary,
+                summary=normalize_summary(summary, max_chars),
                 raw=raw,
             )
         )
@@ -146,8 +148,9 @@ def parse_feed(data: bytes) -> list[Item]:
 class RssCollector:
     """Collector for a single RSS/Atom source, isolating fetch/parse failures."""
 
-    def __init__(self, fetcher: Any) -> None:
+    def __init__(self, fetcher: Any, summary_max_chars: int) -> None:
         self._fetcher = fetcher
+        self._summary_max_chars = summary_max_chars
 
     def collect(self, source: Source) -> list[Item]:
         try:
@@ -162,7 +165,7 @@ class RssCollector:
             return []
 
         try:
-            items = parse_feed(raw_bytes)
+            items = parse_feed(raw_bytes, self._summary_max_chars)
         except Exception:
             logger.warning(
                 "Failed to parse source %s (%s)",

@@ -13,6 +13,7 @@ _DEFAULT_USER_AGENT = (
     "ai-observatory/0.1 (+https://github.com/jasonssdev/ai-observatory)"
 )
 _DEFAULT_RECORD_WINDOW_DAYS = 7
+_DEFAULT_SUMMARY_MAX_CHARS = 500
 
 
 def _int_env(name: str, default: int) -> int:
@@ -35,6 +36,7 @@ class Config:
     sources_path: str
     user_agent: str
     record_window_days: int
+    summary_max_chars: int
 
     @classmethod
     def from_env(cls) -> Config:
@@ -46,5 +48,8 @@ class Config:
             user_agent=os.environ.get("AIOBS_USER_AGENT", _DEFAULT_USER_AGENT),
             record_window_days=_int_env(
                 "AIOBS_RECORD_WINDOW_DAYS", _DEFAULT_RECORD_WINDOW_DAYS
+            ),
+            summary_max_chars=_int_env(
+                "AIOBS_SUMMARY_MAX_CHARS", _DEFAULT_SUMMARY_MAX_CHARS
             ),
         )

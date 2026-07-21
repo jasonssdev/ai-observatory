@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Long Summary Feed</title>
+    <link>https://example.com</link>
+    <description>Fixture feed whose single item has a long multi-paragraph description.</description>
+    <item>
+      <title>Long Item</title>
+      <link>https://example.com/articles/long-item</link>
+      <pubDate>Mon, 20 Jul 2026 14:05:00 GMT</pubDate>
+      <description>This is a fairly long first paragraph that will definitely need truncating for the test to prove the ellipsis behavior works end to end.
+
+This second paragraph must never appear anywhere in the rendered summary.</description>
+    </item>
+  </channel>
+</rss>

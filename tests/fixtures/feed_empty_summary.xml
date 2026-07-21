@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Empty Summary Feed</title>
+    <link>https://example.com</link>
+    <description>Fixture feed whose single item has no description.</description>
+    <item>
+      <title>No Summary Item</title>
+      <link>https://example.com/articles/no-summary-item</link>
+      <pubDate>Mon, 20 Jul 2026 14:05:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
