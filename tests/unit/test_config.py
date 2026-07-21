@@ -160,6 +160,66 @@ class TestFilterKeepPriority:
         assert config.filter_keep_priority == 1
 
 
+class TestHfMinUpvotes:
+    def test_unset_defaults_to_five(self, monkeypatch) -> None:
+        monkeypatch.delenv("AIOBS_HF_MIN_UPVOTES", raising=False)
+
+        config = Config.from_env()
+
+        assert config.hf_min_upvotes == 5
+
+    def test_env_override_takes_effect(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_HF_MIN_UPVOTES", "10")
+
+        config = Config.from_env()
+
+        assert config.hf_min_upvotes == 10
+
+    def test_non_integer_value_falls_back_to_five(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_HF_MIN_UPVOTES", "abc")
+
+        config = Config.from_env()
+
+        assert config.hf_min_upvotes == 5
+
+    def test_negative_value_falls_back_to_five(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_HF_MIN_UPVOTES", "-1")
+
+        config = Config.from_env()
+
+        assert config.hf_min_upvotes == 5
+
+
+class TestHnMinPoints:
+    def test_unset_defaults_to_thirty(self, monkeypatch) -> None:
+        monkeypatch.delenv("AIOBS_HN_MIN_POINTS", raising=False)
+
+        config = Config.from_env()
+
+        assert config.hn_min_points == 30
+
+    def test_env_override_takes_effect(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_HN_MIN_POINTS", "50")
+
+        config = Config.from_env()
+
+        assert config.hn_min_points == 50
+
+    def test_non_integer_value_falls_back_to_thirty(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_HN_MIN_POINTS", "abc")
+
+        config = Config.from_env()
+
+        assert config.hn_min_points == 30
+
+    def test_negative_value_falls_back_to_thirty(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_HN_MIN_POINTS", "-1")
+
+        config = Config.from_env()
+
+        assert config.hn_min_points == 30
+
+
 class TestOllamaSettings:
     def test_no_env_vars_uses_hardcoded_defaults(self, monkeypatch) -> None:
         for name in (

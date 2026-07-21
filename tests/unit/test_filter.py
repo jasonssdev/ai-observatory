@@ -33,6 +33,8 @@ def _config(*, filter_keep_priority: int = 1) -> Config:
         ollama_model="llama3.2",
         ollama_timeout_seconds=60.0,
         filter_keep_priority=filter_keep_priority,
+        hf_min_upvotes=5,
+        hn_min_points=30,
     )
 
 
@@ -71,9 +73,7 @@ class TestScoreAutoKeep:
 
 class TestScoreNoiseKeywordDrop:
     def test_title_matching_noise_keyword_is_routine(self) -> None:
-        item = _item(
-            source_priority=5, title="Funding round announced", summary=""
-        )
+        item = _item(source_priority=5, title="Funding round announced", summary="")
 
         assert score(item, _config(filter_keep_priority=1)) == Verdict.ROUTINE
 

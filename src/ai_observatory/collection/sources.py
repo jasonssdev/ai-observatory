@@ -15,12 +15,14 @@ _REQUIRED_KEYS = ("name", "collector", "url", "category", "priority")
 
 
 def load_sources(path: str | Path) -> list[Source]:
-    """Load sources from a YAML file, keeping only `collector: rss` entries.
+    """Load all valid sources from a YAML file, regardless of `collector` value.
 
-    A completely missing `sources.yaml` is a genuine misconfiguration and
-    raises a clear, actionable `FileNotFoundError`. A single malformed entry
-    (missing a required key) is logged and skipped so it never aborts the
-    whole run; all other valid entries still load.
+    Dispatching a source's `collector` value to a matching `Collector` (or
+    skipping it when no match exists) is the CLI's responsibility, not the
+    loader's. A completely missing `sources.yaml` is a genuine
+    misconfiguration and raises a clear, actionable `FileNotFoundError`. A
+    single malformed entry (missing a required key) is logged and skipped
+    so it never aborts the whole run; all other valid entries still load.
     """
     try:
         with open(path, encoding="utf-8") as fh:
@@ -50,4 +52,4 @@ def load_sources(path: str | Path) -> list[Source]:
                 priority=entry["priority"],
             )
         )
-    return [source for source in sources if source.collector == "rss"]
+    return sources

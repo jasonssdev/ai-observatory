@@ -37,7 +37,7 @@ class TestLoadSources:
         assert sources[0].category == "lab"
         assert sources[0].priority == 1
 
-    def test_filters_out_non_rss_collectors(self, tmp_path: Path) -> None:
+    def test_returns_all_valid_collector_types(self, tmp_path: Path) -> None:
         path = _write_yaml(
             tmp_path,
             """
@@ -46,18 +46,23 @@ class TestLoadSources:
               url: https://example.com/feed.xml
               category: lab
               priority: 1
-            - name: API Source
-              collector: api
-              url: https://example.com/api.json
+            - name: HF Source
+              collector: hf_papers
+              url: https://huggingface.co/api/daily_papers
               category: research
+              priority: 1
+            - name: HN Source
+              collector: hn_algolia
+              url: https://hn.algolia.com/api/v1/search_by_date
+              category: community
               priority: 1
             """,
         )
 
         sources = load_sources(path)
 
-        assert len(sources) == 1
-        assert sources[0].name == "RSS Source"
+        names = {source.name for source in sources}
+        assert names == {"RSS Source", "HF Source", "HN Source"}
 
     def test_malformed_entry_is_logged_and_skipped_valid_entries_still_load(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture

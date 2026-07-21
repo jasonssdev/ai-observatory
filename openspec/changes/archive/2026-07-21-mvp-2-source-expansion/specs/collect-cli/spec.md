@@ -1,30 +1,33 @@
-# collect-cli Specification
+# Delta for collect-cli
 
-## Purpose
+## ADDED Requirements
 
-Expose the fetch → parse → dedup → store → render pipeline as a single
-`collect` command, preserving the existing package entry-point contract.
+### Requirement: Collector Dispatch by Source
+`collect` MUST route each configured source to the collector matching its
+`source.collector` value (`rss` → `RssCollector`, `hf_papers` →
+`HfPapersCollector`, `hn_algolia` → `HnAlgoliaCollector`). A source whose
+`collector` value matches none of the known collectors MUST be logged and
+skipped, and MUST NOT abort the run.
 
-## Requirements
+#### Scenario: Each source routes to its matching collector
+- GIVEN a `sources.yaml` with `rss`, `hf_papers`, and `hn_algolia` sources
+- WHEN `collect` runs
+- THEN each source's items are produced by the collector matching its
+  `collector` value
 
-### Requirement: Collect Command
-The system MUST expose a `collect` command (typer) that runs the full
-pipeline for all configured sources.
+#### Scenario: Unknown collector value is skipped, not fatal
+- GIVEN a source whose `collector` value has no matching collector
+- WHEN `collect` runs
+- THEN that source is logged and skipped, and the run exits 0 with items
+  from the remaining sources
 
-#### Scenario: Successful run produces a record
-- GIVEN a valid `sources.yaml` and reachable feeds
-- WHEN `ai-observatory collect` runs
-- THEN it exits 0 and `data/records/<today>.md` is created or updated
+#### Scenario: P2 RSS feeds flow through the existing RSS collector
+- GIVEN a `sources.yaml` with `priority: 2` entries whose `collector` is `rss`
+- WHEN `collect` runs
+- THEN those sources are collected via `RssCollector` identically to
+  priority-1 RSS sources
 
-### Requirement: Entry-Point Preservation
-The `ai_observatory:main` console-script entry point MUST remain valid;
-`main()` MUST invoke the typer app without breaking the existing
-`ai-observatory` executable contract.
-
-#### Scenario: Installed script still resolves
-- GIVEN the package installed with its `[project.scripts]` entry point
-- WHEN `ai-observatory collect` is invoked as the installed executable
-- THEN `main()` dispatches to the typer app and the `collect` command runs
+## MODIFIED Requirements
 
 ### Requirement: Config Wiring
 `collect` MUST read `DATA_DIR`, `DB_PATH`, `RECORDS_DIR`, `SOURCES_PATH`,
@@ -37,8 +40,9 @@ default to `500` and MUST fail-safe to `500` when the env value is invalid
 (non-integer) or negative. `AIOBS_HF_MIN_UPVOTES` MUST default to `5` and
 `AIOBS_HN_MIN_POINTS` MUST default to `30`; both MUST fail-safe to their
 default when the env value is invalid (non-integer) or negative.
-(Previously: only `RECORD_WINDOW_DAYS` was documented among numeric,
-fail-safe config values; `SUMMARY_MAX_CHARS` did not exist; `AIOBS_HF_MIN_UPVOTES` and `AIOBS_HN_MIN_POINTS` did not exist.)
+(Previously: `RECORD_WINDOW_DAYS` and `SUMMARY_MAX_CHARS` were the only
+documented numeric, fail-safe config values; `AIOBS_HF_MIN_UPVOTES` and
+`AIOBS_HN_MIN_POINTS` did not exist.)
 
 #### Scenario: Defaults apply when no env vars set
 - GIVEN no `AIOBS_*` environment variables are set
@@ -72,31 +76,6 @@ fail-safe config values; `SUMMARY_MAX_CHARS` did not exist; `AIOBS_HF_MIN_UPVOTE
 - THEN the corresponding threshold falls back to its documented default and
   the run completes without error
 
-### Requirement: Collector Dispatch by Source
-`collect` MUST route each configured source to the collector matching its
-`source.collector` value (`rss` → `RssCollector`, `hf_papers` →
-`HfPapersCollector`, `hn_algolia` → `HnAlgoliaCollector`). A source whose
-`collector` value matches none of the known collectors MUST be logged and
-skipped, and MUST NOT abort the run.
-
-#### Scenario: Each source routes to its matching collector
-- GIVEN a `sources.yaml` with `rss`, `hf_papers`, and `hn_algolia` sources
-- WHEN `collect` runs
-- THEN each source's items are produced by the collector matching its
-  `collector` value
-
-#### Scenario: Unknown collector value is skipped, not fatal
-- GIVEN a source whose `collector` value has no matching collector
-- WHEN `collect` runs
-- THEN that source is logged and skipped, and the run exits 0 with items
-  from the remaining sources
-
-#### Scenario: P2 RSS feeds flow through the existing RSS collector
-- GIVEN a `sources.yaml` with `priority: 2` entries whose `collector` is `rss`
-- WHEN `collect` runs
-- THEN those sources are collected via `RssCollector` identically to
-  priority-1 RSS sources
-
 ### Requirement: Source Loading Includes All Collector Types
 `load_sources` MUST return every valid entry from `sources.yaml` regardless
 of its `collector` value, keeping only the existing per-entry malformed-key
@@ -115,12 +94,3 @@ CLI's responsibility, not the loader's.
 - WHEN `load_sources` loads the file
 - THEN that entry is logged and skipped, and all other valid entries load
   regardless of their `collector` value
-
-### Requirement: Non-Fatal Run Completion
-`collect` MUST exit 0 even when one or more sources fail; failures are logged,
-not raised to the CLI level.
-
-#### Scenario: One unreachable source among nine
-- GIVEN one of nine configured sources is unreachable
-- WHEN `collect` runs
-- THEN it exits 0 and produces a record from the remaining reachable sources
