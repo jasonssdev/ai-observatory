@@ -79,7 +79,7 @@ Approach 1 (httpx fetch + feedparser parse) with stdlib sqlite3 storage and pure
 5. **Scheduling boundary:** confirm MVP-1 is manual `collect` only (no launchd) — settled by roadmap, restate as a non-goal.
 6. **Missing/naive published_at:** default when a feed omits dates; UTC normalization of tz-aware and naive datetimes.
 7. **raw storage:** store original feed entry as JSON text column for traceability/reprocessing.
-8. **Entry point:** reconcile `[project.scripts] ai-observatory = "ai_observatory:main"` with a typer app (main() invokes the typer app, or point script at the typer callback).
+8. **Entry point:** reconcile `[project.scripts] ai_observatory = "ai_observatory:main"` with a typer app (main() invokes the typer app, or point script at the typer callback).
 9. **config.py:** hardcoded defaults vs. env overrides for data dir / DB path / UA (no secrets required in MVP-1).
 
 ## Risks / Unknowns
