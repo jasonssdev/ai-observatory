@@ -17,7 +17,12 @@ from typing import Any
 from ai_observatory.collection.base import Source
 from ai_observatory.collection.dedup import canonicalize_url, item_id
 from ai_observatory.collection.text import normalize_summary
-from ai_observatory.storage.models import Item
+from ai_observatory.storage.models import (
+    SIGNAL_SCALE_KEY,
+    SIGNAL_SCORE_KEY,
+    Item,
+    SignalScale,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +88,14 @@ def parse_hn_algolia(data: bytes, min_points: int, max_chars: int) -> list[Item]
             else _PERMALINK_TEMPLATE.format(object_id=object_id)
         )
         canonical = canonicalize_url(url)
-        raw = json.dumps(hit, default=str)
+        raw = json.dumps(
+            {
+                **hit,
+                SIGNAL_SCORE_KEY: points,
+                SIGNAL_SCALE_KEY: SignalScale.HN_POINTS,
+            },
+            default=str,
+        )
 
         items.append(
             Item(

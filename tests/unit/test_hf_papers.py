@@ -31,6 +31,16 @@ class TestParseHfPapers:
         raw = json.loads(item.raw)
         assert raw["paper"]["upvotes"] == 42
 
+    def test_parse_injects_normalized_signal_score_and_scale(self) -> None:
+        items = parse_hf_papers(
+            _fixture_bytes("hf_daily_papers.json"), min_upvotes=5, max_chars=500
+        )
+
+        raw = json.loads(items[0].raw)
+        assert raw["signal_score"] == raw["paper"]["upvotes"]
+        assert isinstance(raw["signal_score"], int)
+        assert raw["signal_scale"] == "hf_upvotes"
+
     def test_parse_below_threshold_dropped(self) -> None:
         items = parse_hf_papers(
             _fixture_bytes("hf_daily_papers.json"), min_upvotes=5, max_chars=500

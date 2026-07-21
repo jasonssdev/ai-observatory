@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai_observatory.config import Config, _float_env
+from ai_observatory.config import Config, _float_env, _optional_int_env
 
 
 class TestConfigDefaultsAndOverrides:
@@ -218,6 +218,67 @@ class TestHnMinPoints:
         config = Config.from_env()
 
         assert config.hn_min_points == 30
+
+
+class TestOptionalIntEnv:
+    def test_unset_returns_none(self, monkeypatch) -> None:
+        monkeypatch.delenv("AIOBS_TEST_OPTIONAL_INT", raising=False)
+
+        assert _optional_int_env("AIOBS_TEST_OPTIONAL_INT") is None
+
+    def test_blank_returns_none(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_TEST_OPTIONAL_INT", "")
+
+        assert _optional_int_env("AIOBS_TEST_OPTIONAL_INT") is None
+
+    def test_valid_value_returns_int(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_TEST_OPTIONAL_INT", "42")
+
+        assert _optional_int_env("AIOBS_TEST_OPTIONAL_INT") == 42
+
+    def test_non_integer_returns_none(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_TEST_OPTIONAL_INT", "abc")
+
+        assert _optional_int_env("AIOBS_TEST_OPTIONAL_INT") is None
+
+    def test_negative_returns_none(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_TEST_OPTIONAL_INT", "-1")
+
+        assert _optional_int_env("AIOBS_TEST_OPTIONAL_INT") is None
+
+    def test_zero_is_a_valid_value(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_TEST_OPTIONAL_INT", "0")
+
+        assert _optional_int_env("AIOBS_TEST_OPTIONAL_INT") == 0
+
+
+class TestFilterScoreKeepThresholds:
+    def test_unset_defaults_to_none(self, monkeypatch) -> None:
+        monkeypatch.delenv("AIOBS_FILTER_HF_KEEP_UPVOTES", raising=False)
+        monkeypatch.delenv("AIOBS_FILTER_HN_KEEP_POINTS", raising=False)
+
+        config = Config.from_env()
+
+        assert config.filter_hf_keep_upvotes is None
+        assert config.filter_hn_keep_points is None
+
+    def test_env_override_takes_effect(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_FILTER_HF_KEEP_UPVOTES", "50")
+        monkeypatch.setenv("AIOBS_FILTER_HN_KEEP_POINTS", "200")
+
+        config = Config.from_env()
+
+        assert config.filter_hf_keep_upvotes == 50
+        assert config.filter_hn_keep_points == 200
+
+    def test_invalid_value_falls_back_to_none(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_FILTER_HF_KEEP_UPVOTES", "abc")
+        monkeypatch.setenv("AIOBS_FILTER_HN_KEEP_POINTS", "-1")
+
+        config = Config.from_env()
+
+        assert config.filter_hf_keep_upvotes is None
+        assert config.filter_hn_keep_points is None
 
 
 class TestOllamaSettings:
