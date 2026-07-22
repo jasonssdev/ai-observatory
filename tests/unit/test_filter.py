@@ -316,9 +316,10 @@ class TestBuildPrompt:
 
         prompt = build_prompt(item)
 
-        assert "breakthrough" in prompt
+        assert "selective" in prompt
+        assert "When in doubt" in prompt
+        assert "arXiv" in prompt
         assert "tutorials" in prompt
-        assert "roundups" in prompt
         assert "Answer with ONLY one word" in prompt
 
 
