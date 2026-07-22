@@ -77,7 +77,7 @@ def _render_significant_section(items: list[Item]) -> list[str]:
     ordered_categories = known_categories + unknown_categories
 
     for category in ordered_categories:
-        lines.append(f"## {category.capitalize()}")
+        lines.append(f"### {category.capitalize()}")
         lines.append("")
         for item in sorted(grouped[category], key=_sort_key):
             lines.append(_item_line(item))
