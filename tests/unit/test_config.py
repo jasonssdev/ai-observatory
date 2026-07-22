@@ -360,7 +360,7 @@ class TestOllamaSettings:
         config = Config.from_env()
 
         assert config.ollama_url == "http://localhost:11434"
-        assert config.ollama_model == "llama3.2"
+        assert config.ollama_model == "qwen2.5:7b"
         assert config.ollama_timeout_seconds == 60.0
 
     def test_env_overrides_take_effect(self, monkeypatch) -> None:

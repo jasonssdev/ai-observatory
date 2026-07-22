@@ -661,5 +661,45 @@ class TestCollectEndToEnd:
         assert "Company announces new funding round" not in significant_section
 
 
+class TestCollectModelProvenance:
+    def test_model_flag_is_recorded_in_item_significance(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        sources_path = tmp_path / "sources.yaml"
+        sources_path.write_text(
+            "- name: Test Source\n"
+            "  collector: rss\n"
+            "  url: https://example.com/feed.xml\n"
+            "  category: news\n"
+            "  priority: 5\n",
+            encoding="utf-8",
+        )
+        records_dir = tmp_path / "records"
+        db_path = tmp_path / "observatory.db"
+
+        monkeypatch.setenv("AIOBS_SOURCES_PATH", str(sources_path))
+        monkeypatch.setenv("AIOBS_RECORDS_DIR", str(records_dir))
+        monkeypatch.setenv("AIOBS_DB_PATH", str(db_path))
+        monkeypatch.setattr("ai_observatory.cli.HttpxFetcher", _FakeFetcher)
+        monkeypatch.setattr("ai_observatory.cli.OllamaClient", _FakeOllamaClient)
+        monkeypatch.setattr("ai_observatory.cli.datetime", _FixedToday)
+
+        collect(model="qwen2.5:3b")
+
+        connection = db.connect(str(db_path))
+        try:
+            rows = connection.execute(
+                "SELECT DISTINCT model FROM item_significance WHERE model IS NOT NULL"
+            ).fetchall()
+        finally:
+            connection.close()
+        distinct_models = {row[0] for row in rows}
+
+        # Rule-based (non-LLM) verdicts persist `model = NULL`; only items
+        # actually classified via the LLM carry the resolved model, and this
+        # fixture forces at least one such classification.
+        assert distinct_models == {"qwen2.5:3b"}
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

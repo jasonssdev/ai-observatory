@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 
 import ai_observatory.cli as cli_module
 from ai_observatory.cli import app
+from ai_observatory.synthesis.llm import LLMResponse
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"
 runner = CliRunner()
@@ -104,6 +105,92 @@ class TestCollectCommand:
             path.read_text(encoding="utf-8") for path in written_files
         )
         assert "First Item" in combined_content
+
+
+class _CapturingOllamaClient:
+    """Fake `LLMClient`: captures the constructor's `model` on the class.
+
+    Class-level (not instance-level) so the test can read it after
+    `runner.invoke` returns without needing a reference to the instance
+    `collect()` built internally.
+    """
+
+    captured_model: str | None = None
+
+    def __init__(self, url: str, model: str, timeout: float) -> None:
+        self.url = url
+        self.model = model
+        self.timeout = timeout
+        type(self).captured_model = model
+
+    def generate(self, prompt: str) -> LLMResponse:
+        return LLMResponse(text="SIGNIFICANT", model=self.model, raw={})
+
+
+class TestCollectModelFlag:
+    def _empty_sources_env(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        sources_path = _sources_yaml(tmp_path, [])
+        monkeypatch.setenv("AIOBS_SOURCES_PATH", str(sources_path))
+        monkeypatch.setenv("AIOBS_DB_PATH", str(tmp_path / "db.sqlite3"))
+        monkeypatch.setenv("AIOBS_RECORDS_DIR", str(tmp_path / "records"))
+        monkeypatch.setattr(cli_module, "OllamaClient", _CapturingOllamaClient)
+        _CapturingOllamaClient.captured_model = None
+
+    def test_flag_overrides_default(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._empty_sources_env(tmp_path, monkeypatch)
+
+        result = runner.invoke(app, ["collect", "--model", "qwen2.5:3b"])
+
+        assert result.exit_code == 0
+        assert _CapturingOllamaClient.captured_model == "qwen2.5:3b"
+
+    def test_env_used_when_no_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._empty_sources_env(tmp_path, monkeypatch)
+        monkeypatch.setenv("AIOBS_OLLAMA_MODEL", "mistral")
+
+        result = runner.invoke(app, ["collect"])
+
+        assert result.exit_code == 0
+        assert _CapturingOllamaClient.captured_model == "mistral"
+
+    def test_config_default_used_when_neither_set(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._empty_sources_env(tmp_path, monkeypatch)
+        monkeypatch.delenv("AIOBS_OLLAMA_MODEL", raising=False)
+
+        result = runner.invoke(app, ["collect"])
+
+        assert result.exit_code == 0
+        assert _CapturingOllamaClient.captured_model == "qwen2.5:7b"
+
+    def test_flag_takes_precedence_over_env(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._empty_sources_env(tmp_path, monkeypatch)
+        monkeypatch.setenv("AIOBS_OLLAMA_MODEL", "mistral")
+
+        result = runner.invoke(app, ["collect", "--model", "qwen2.5:3b"])
+
+        assert result.exit_code == 0
+        assert _CapturingOllamaClient.captured_model == "qwen2.5:3b"
+
+    def test_empty_flag_falls_back_to_default(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._empty_sources_env(tmp_path, monkeypatch)
+        monkeypatch.delenv("AIOBS_OLLAMA_MODEL", raising=False)
+
+        result = runner.invoke(app, ["collect", "--model", ""])
+
+        assert result.exit_code == 0
+        assert _CapturingOllamaClient.captured_model == "qwen2.5:7b"
 
 
 if __name__ == "__main__":
