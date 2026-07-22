@@ -14,6 +14,8 @@ So the build is split into three MVPs plus a final v1.0, as **vertical slices** 
 
 ## MVP 1 — The daily record
 
+**Status: Done ✓ (merged & archived).**
+
 **Goal:** stop checking feeds by hand. Run one command, open one file, see the day's AI developments — deduplicated and linked.
 
 **Included:**
@@ -34,12 +36,14 @@ So the build is split into three MVPs plus a final v1.0, as **vertical slices** 
 
 ## MVP 2 — Signal
 
+**Status: Done ✓ (merged & archived).**
+
 **Goal:** the daily record becomes *curated*, not a raw dump. Significant developments separated from routine noise.
 
 **Included:**
 
 - Ollama integration (`llm.py`) — the **local** LLM.
-- The **hybrid daily filter**: deterministic rules first (source priority + keyword/score thresholds) to drop obvious noise, then local-LLM classification on what survives. The daily record now keeps the significant items and sets aside the rest.
+- The **hybrid daily filter**: deterministic rules first (source-priority auto-keep, HF/HN score-keep, category-routine, and noise-keyword) to decide the obvious cases, then local-LLM classification on what survives. The category-routine rule routes configured categories (default `research`) to routine. The daily record now keeps the significant items and sets aside the rest.
 - Source expansion: the **JSON APIs** (HF Daily Papers with an upvote threshold, HN Algolia with a points threshold) and the P2 feeds.
 - Tests for the filter (rule behavior, thresholds, malformed input).
 
@@ -87,11 +91,11 @@ So the build is split into three MVPs plus a final v1.0, as **vertical slices** 
 
 ## At a glance
 
-| Stage | Delivers | You can validate | Runs automatically? | LLM |
-| --- | --- | --- | --- | --- |
-| **MVP 1** | Deduplicated daily record from P1 RSS feeds | "Is it catching the day, cleanly?" | No — manual `collect` | None |
-| **MVP 2** | Curated daily record (signal vs noise) + more sources | "Is the filter keeping the right things?" | No — manual | Ollama (filter) |
-| **MVP 3** | Weekly ranked briefing (≤10 topics) + scheduling | "Could I make content from this?" | Yes — daily + weekly | Ollama (filter + briefing) |
-| **v1.0** | Bridged + optional X sources, hardening | "Is coverage complete and resilient?" | Yes | Ollama |
+| Stage | Status | Delivers | You can validate | Runs automatically? | LLM |
+| --- | --- | --- | --- | --- | --- |
+| **MVP 1** | ✓ Shipped | Deduplicated daily record from P1 RSS feeds | "Is it catching the day, cleanly?" | No — manual `collect` | None |
+| **MVP 2** | ✓ Shipped | Curated daily record (signal vs noise) + more sources | "Is the filter keeping the right things?" | No — manual | Ollama (filter) |
+| **MVP 3** | Pending | Weekly ranked briefing (≤10 topics) + scheduling | "Could I make content from this?" | Yes — daily + weekly | Ollama (filter + briefing) |
+| **v1.0** | Pending | Bridged + optional X sources, hardening | "Is coverage complete and resilient?" | Yes | Ollama |
 
 Everything remains within the [non-goals](vision.md#non-goals): no real-time alerting, no auto-publishing, no multi-user/SaaS, no exhaustive crawling. The human always decides what becomes content.

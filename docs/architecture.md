@@ -2,7 +2,7 @@
 
 Technical design for AI Observatory. This document turns the goals in [vision.md](vision.md) and the sources in [source-selection.md](source-selection.md) into a buildable structure. It defines the pipeline, the data model, the storage format, how sources are collected, how work is scheduled, and what belongs in the first version.
 
-It is a design reference, not a specification of finished code — the repo is in planning stage.
+It is a design reference, not a specification of finished code. MVP 1 and MVP 2 are implemented (daily collection, storage, and the hybrid significance filter); MVP 3 (weekly synthesis, scheduling) and v1.0 (bridge/Apify collectors, hardening) are still design targets. Sections describing weekly synthesis, RSSHub, and Apify below are not-yet-built where written in the present tense.
 
 ## Design principles (applied)
 
@@ -49,28 +49,32 @@ src/ai_observatory/
   collection/
     base.py          # Collector interface (abstract)
     rss.py           # RssCollector — the default engine
-    apify.py         # ApifyCollector — optional, for X/Twitter (off by default)
-    rsshub.py        # RsshubCollector — optional, for no-RSS blogs
+    hf_papers.py     # HfPapersCollector — Hugging Face Daily Papers JSON API
+    hn_algolia.py    # HnAlgoliaCollector — Hacker News Algolia JSON API
+    text.py          # HTML/entity cleanup + summary truncation helpers
+    apify.py         # ApifyCollector — planned (not present); optional, for X/Twitter
+    rsshub.py        # RsshubCollector — planned (not present); optional, for no-RSS blogs
     sources.py       # loads sources.yaml, applies priorities
     dedup.py         # canonical-URL + title-hash deduplication
   storage/
-    db.py            # SQLite access
-    records.py       # daily Markdown record writer
-    models.py        # Item, DailyRecord, WeeklyBriefing dataclasses/schema
+    db.py            # SQLite access (items + item_significance tables)
+    records.py       # daily Markdown record writer + window helpers
+    models.py        # Item dataclass + SignalScale enum (no DailyRecord/WeeklyBriefing yet)
   synthesis/
-    daily.py         # filter + classify the day's items
-    weekly.py        # rank topics, build the briefing
-    llm.py           # LLM client abstraction (local or API)
-  config.py          # settings, paths, secrets from .env
-  cli.py             # `collect`, `synthesize` entry points
+    filter.py        # hybrid significance classifier (deterministic rules + LLM)
+    llm.py           # Ollama client abstraction (local)
+    daily.py         # planned (not present) — folded into filter.py for now
+    weekly.py        # planned (not present) — rank topics, build the briefing
+  config.py          # settings + paths from AIOBS_* env vars (no .env/dotenv)
+  cli.py             # `collect` only; `synthesize` planned
 data/                # gitignored — the local store
   observatory.db
   records/<YYYY-MM-DD>.md
-  briefings/<YYYY-Www>.md
+  briefings/<YYYY-Www>.md   # planned (weekly synthesis not built yet)
 sources.yaml         # the source list as config (see below)
 ```
 
-`data/`, `.env`, and virtual environments stay out of source control (see [AGENTS.md](../AGENTS.md#security--configuration)).
+`data/` and virtual environments stay out of source control (see [AGENTS.md](../AGENTS.md#security--configuration)).
 
 ## Data model
 
@@ -140,8 +144,10 @@ Collection responsibilities: fetch with a real `User-Agent`, parse, normalize to
 
 Two representations of the same data, each for a different reader:
 
-- **SQLite (`data/observatory.db`)** — the queryable store. Deduplication, "what did we already see," and the input to synthesis. One `items` table keyed by `id`, indexed on `published_at` and `source_priority`.
-- **Markdown (`data/records/<date>.md`)** — the human-readable daily record. Generated from the day's items so you can open any day and read it, exactly as the vision requires. The DB is the source of truth; Markdown is a rendered view.
+- **SQLite (`data/observatory.db`)** — the queryable store. Deduplication, "what did we already see," and the input to synthesis. Two tables:
+  - `items`, keyed by `id`, indexed on `published_at` and `source_priority`, holding the normalized item fields (`title`, `url`, `canonical_url`, `title_hash`, `source`, `source_priority`, `category`, `published_at`, `collected_at`, `summary`, `raw`).
+  - `item_significance`, keyed by `item_id`, holding each item's filter verdict: `label` (SIGNIFICANT / ROUTINE), `mode` (DETERMINISTIC / LLM), `model` (the LLM model name, or null for deterministic verdicts), and `classified_at`.
+- **Markdown (`data/records/<date>.md`)** — the human-readable daily record. Re-rendered from both tables — the day's items joined with their significance verdicts — so you can open any day and read it, exactly as the vision requires. The DB is the source of truth (it holds the verdicts); Markdown is a rendered view.
 
 Weekly briefings are written the same way to `data/briefings/<week>.md`.
 
@@ -149,7 +155,7 @@ Weekly briefings are written the same way to `data/briefings/<week>.md`.
 
 Two steps, both backed by a **local** LLM (Ollama) through a thin `llm.py` abstraction. The model never leaves your machine — hosted model APIs are explicitly out of scope for reasoning. External APIs are used *only to fetch sources* (HF Daily Papers, HN Algolia, Apify); no source data is sent to a third-party model. `llm.py` still abstracts the client so the specific local model is swappable, but the target is always local.
 
-- **Daily** (`daily.py`) — over the day's deduplicated items, drop routine noise and classify what remains. This is a **hybrid** filter: cheap deterministic rules first (source priority + keyword/score thresholds) discard the obvious noise, then the local LLM classifies what survives. Priority-weighted — P1 sources clear the bar easily; P3 sources must earn it. Output is appended to the daily record, keeping the weekly step working over signal, not raw volume.
+- **Daily** (`filter.py`) — over the day's deduplicated items, drop routine noise and classify what remains. This is a **hybrid** filter that applies cheap deterministic rules first, in order: (1) **P1 auto-keep** — sources at or above the keep priority are kept as SIGNIFICANT; (2) **score-keep** — items whose HF upvotes / HN points meet the configured threshold are kept as SIGNIFICANT (overrides a noise keyword); (3) **category-routine** — items in a configured routine category (default `research`) are set aside as ROUTINE, unless already kept by (1) or (2); (4) **noise-keyword** — items matching a noise keyword are set aside as ROUTINE. Anything still undecided (UNCERTAIN) is handed to the local LLM. If the LLM is unavailable, the run **degrades to deterministic-only** on the first failure — every remaining UNCERTAIN item defaults to ROUTINE and the run never fails. The verdicts are persisted and the daily record re-rendered from them, keeping the weekly step working over signal, not raw volume.
 - **Weekly** (`weekly.py`) — over the week's kept items, answer *what changed and why it matters*. Produces a ranked list of **at most 10 topics**, each with its "why" and its source links. This is the deliverable that feeds content creation.
 
 The LLM proposes; it never publishes and never fabricates. Every topic it emits must cite backing items — the code enforces the traceability rule rather than trusting the model.
@@ -165,7 +171,14 @@ Runs are idempotent: re-running a day re-collects and re-dedupes without creatin
 
 ## Configuration & secrets
 
-Settings and paths in `config.py`, secrets in a gitignored `.env` with a committed sanitized `.env.example`. No API keys, tokens, or machine-specific paths in source control ([AGENTS.md](../AGENTS.md#security--configuration)). Only *source-collector* credentials (e.g. an Apify token) live in `.env` — there is no LLM API key, because the model is local. With no optional credentials set, the system runs entirely on free RSS/APIs plus the local Ollama model.
+Settings and paths live in `config.py`, which reads a frozen `Config` from `AIOBS_*` environment variables with safe defaults — there is no `.env`/dotenv loading. Key variables:
+
+- `AIOBS_OLLAMA_MODEL` — the local Ollama model (default `qwen2.5:7b`). The `collect --model` flag overrides it per run (precedence `--model` > `AIOBS_OLLAMA_MODEL` > default).
+- `AIOBS_FILTER_ROUTINE_CATEGORIES` — comma-separated categories routed to ROUTINE (default `research`).
+- `AIOBS_HF_MIN_UPVOTES` / `AIOBS_HN_MIN_POINTS` — collection thresholds; `AIOBS_FILTER_HF_KEEP_UPVOTES` / `AIOBS_FILTER_HN_KEEP_POINTS` — the score-keep thresholds in the filter.
+- Paths (`AIOBS_DB_PATH`, `AIOBS_RECORDS_DIR`, `AIOBS_SOURCES_PATH`, …) and the window / timeout knobs.
+
+No secret-bearing collectors are wired yet: there is no LLM API key (the model is local), and the Apify token is deferred with its collector. The system runs entirely on free RSS/APIs plus the local Ollama model. No machine-specific paths belong in source control ([AGENTS.md](../AGENTS.md#security--configuration)).
 
 ## MVP scope
 

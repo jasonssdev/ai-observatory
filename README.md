@@ -9,7 +9,7 @@ Keeping up with AI by hand does not scale. The important developments — new mo
 The system runs on two rhythms:
 
 - **Every day — observe and accumulate.** It checks a curated list of trusted sources, keeps the significant AI developments, and stores them as a structured local record. Each daily record is useful on its own; the record grows day by day and nothing is lost between runs.
-- **Once a week — synthesize.** It reviews everything accumulated that week and produces a short, ranked list answering one question: *what changed this week, and why does it matter?* That weekly briefing is the material you use to create videos, articles, newsletters, or posts.
+- **Once a week — synthesize.** (Planned — MVP 3, not yet available.) It reviews everything accumulated that week and produces a short, ranked list answering one question: *what changed this week, and why does it matter?* That weekly briefing is the material you use to create videos, articles, newsletters, or posts.
 
 It is a monitoring system, not a chatbot, a search engine, or an auto-publisher. It organizes and proposes; the human always decides what becomes content.
 
@@ -30,15 +30,32 @@ Local-first (records and processing stay on your machine by default; cloud is op
 
 ## Status
 
-Planning stage. The design is documented; implementation has not started yet. See [docs/roadmap.md](docs/roadmap.md) for the MVP plan and [AGENTS.md](AGENTS.md) for the intended project layout.
+MVP 1 (the daily record) and MVP 2 (the signal filter) are implemented and in use. `ai-observatory collect` fetches all configured sources, deduplicates, stores to SQLite, classifies each item with a hybrid deterministic + local-LLM filter, and regenerates the Markdown daily records — splitting significant developments from routine noise.
+
+Not built yet: the weekly `synthesize` briefing and unattended scheduling (MVP 3), and the bridged (RSSHub) / optional X (Apify) sources plus hardening (v1.0). See [docs/roadmap.md](docs/roadmap.md) for the full plan.
 
 ## Setup
 
-_To be added with the first code contribution._ The first version will ship a `pyproject.toml` with the setup, run, lint, and test commands documented here.
+Requires **Python 3.13+** and [**uv**](https://docs.astral.sh/uv/). [Ollama](https://ollama.com) is optional: without it, the filter degrades gracefully to its deterministic-only rules (the run never fails).
 
 ```bash
-# Placeholder — not implemented yet
-# uv sync
-# ai-observatory collect     # run the daily collection
-# ai-observatory synthesize  # build the weekly briefing
+uv sync                       # install dependencies
+uv run ai-observatory collect # run the daily collection
+```
+
+`collect` writes a Markdown record per day at `data/records/<date>.md` and stores every item in the SQLite database at `data/observatory.db` (both under the gitignored `data/` directory).
+
+The filter classifies uncertain items with a local Ollama model (default `qwen2.5:7b`). Override the model per run with `--model`:
+
+```bash
+uv run ai-observatory collect --model llama3.2
+```
+
+Precedence is `--model` > `AIOBS_OLLAMA_MODEL` env var > the config default.
+
+### Development
+
+```bash
+uv run pytest            # run the test suite
+uv run ruff check .      # lint
 ```

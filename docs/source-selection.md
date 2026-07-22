@@ -138,6 +138,6 @@ Not automated. These stay manual because reliable automation isn't possible or w
 
 ## Coverage summary
 
-Automatable today, no bridge needed: **~28 feeds/APIs** across labs, research, community, newsletters, news, and tooling. Add one local RSSHub instance and the six bridged sources (Anthropic first) and coverage is effectively complete for a high-signal, low-intervention system. X and Discord remain the only genuinely manual gaps — and their news reliably reaches the automated tiers within hours.
+Automatable today, no bridge needed: **~28 feeds/APIs** catalogued as candidates across labs, research, community, newsletters, news, and tooling — of which **25 are currently wired** in `sources.yaml` (the P1 + P2 set). Add one local RSSHub instance and the six bridged sources (Anthropic first) and coverage is effectively complete for a high-signal, low-intervention system. X and Discord remain the only genuinely manual gaps — and their news reliably reaches the automated tiers within hours.
 
 _Last verified: 2026-07-20._
