@@ -61,5 +61,3 @@ Approach 1. Because `""` is falsy, `--model ""` naturally falls back to the conf
 
 ## Ready for Proposal
 Yes. Small, well-bounded, single-file production change (cli.py) plus tests. Approach 1.
-</content>
-</invoke>
