@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -176,8 +177,69 @@ def build_prompt(item: Item) -> str:
     )
 
 
+def _classify_one(
+    item: Item, llm_client: LLMClient, config: Config, llm_available: bool
+) -> tuple[Significance, bool]:
+    """Classify a single `item`, deterministic-first, LLM for the UNCERTAIN case.
+
+    Returns the resulting `Significance` verdict and the (possibly updated)
+    `llm_available` flag: it flips to `False` on the first `LLMError` and
+    stays `False` for every subsequent UNCERTAIN item passed in with
+    `llm_available=False`. Never raises.
+    """
+    deterministic_verdict = score(item, config)
+    if deterministic_verdict is not None:
+        return (
+            Significance(
+                item_id=item.id,
+                label=deterministic_verdict,
+                mode=Mode.DETERMINISTIC,
+                model=None,
+            ),
+            llm_available,
+        )
+
+    if not llm_available:
+        return (
+            Significance(
+                item_id=item.id,
+                label=Verdict.ROUTINE,
+                mode=Mode.DETERMINISTIC,
+                model=None,
+            ),
+            llm_available,
+        )
+
+    try:
+        response = llm_client.generate(build_prompt(item))
+    except LLMError:
+        logger.warning("LLM unavailable; run degraded to deterministic-only")
+        return (
+            Significance(
+                item_id=item.id,
+                label=Verdict.ROUTINE,
+                mode=Mode.DETERMINISTIC,
+                model=None,
+            ),
+            False,
+        )
+
+    return (
+        Significance(
+            item_id=item.id,
+            label=parse_verdict(response.text),
+            mode=Mode.LLM,
+            model=response.model,
+        ),
+        llm_available,
+    )
+
+
 def classify_items(
-    items: list[Item], llm_client: LLMClient, config: Config
+    items: list[Item],
+    llm_client: LLMClient,
+    config: Config,
+    progress: Callable[[int], None] | None = None,
 ) -> tuple[list[Significance], bool]:
     """Classify every item, deterministic-first, LLM for the UNCERTAIN rest.
 
@@ -187,6 +249,10 @@ def classify_items(
     subsequent UNCERTAIN item are classified `ROUTINE`/`DETERMINISTIC`
     without further LLM calls. The run never raises.
 
+    If `progress` is given, it is called exactly once per item (with `1`)
+    after that item's verdict is produced, regardless of which
+    classification path it took — useful for driving a progress bar.
+
     Returns `(verdicts, llm_available)` where `llm_available` is `False`
     once the run has degraded.
     """
@@ -194,53 +260,9 @@ def classify_items(
     verdicts: list[Significance] = []
 
     for item in items:
-        deterministic_verdict = score(item, config)
-        if deterministic_verdict is not None:
-            verdicts.append(
-                Significance(
-                    item_id=item.id,
-                    label=deterministic_verdict,
-                    mode=Mode.DETERMINISTIC,
-                    model=None,
-                )
-            )
-            continue
-
-        if not llm_available:
-            verdicts.append(
-                Significance(
-                    item_id=item.id,
-                    label=Verdict.ROUTINE,
-                    mode=Mode.DETERMINISTIC,
-                    model=None,
-                )
-            )
-            continue
-
-        try:
-            response = llm_client.generate(build_prompt(item))
-        except LLMError:
-            logger.warning(
-                "LLM unavailable; run degraded to deterministic-only"
-            )
-            llm_available = False
-            verdicts.append(
-                Significance(
-                    item_id=item.id,
-                    label=Verdict.ROUTINE,
-                    mode=Mode.DETERMINISTIC,
-                    model=None,
-                )
-            )
-            continue
-
-        verdicts.append(
-            Significance(
-                item_id=item.id,
-                label=parse_verdict(response.text),
-                mode=Mode.LLM,
-                model=response.model,
-            )
-        )
+        verdict, llm_available = _classify_one(item, llm_client, config, llm_available)
+        verdicts.append(verdict)
+        if progress is not None:
+            progress(1)
 
     return verdicts, llm_available
