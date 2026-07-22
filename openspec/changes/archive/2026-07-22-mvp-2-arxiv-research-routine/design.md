@@ -141,5 +141,3 @@ classification time). Rollback without code revert: set
 ## Open Questions
 
 None — the default-ON `{"research"}` policy is user-confirmed; all decisions LOCKED.
-</content>
-</invoke>
