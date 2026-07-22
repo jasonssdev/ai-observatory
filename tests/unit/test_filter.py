@@ -26,6 +26,7 @@ def _config(
     filter_keep_priority: int = 1,
     filter_hf_keep_upvotes: int | None = None,
     filter_hn_keep_points: int | None = None,
+    filter_routine_categories: frozenset[str] = frozenset(),
 ) -> Config:
     return Config(
         data_dir="./data",
@@ -43,6 +44,7 @@ def _config(
         hn_min_points=30,
         filter_hf_keep_upvotes=filter_hf_keep_upvotes,
         filter_hn_keep_points=filter_hn_keep_points,
+        filter_routine_categories=filter_routine_categories,
     )
 
 
@@ -53,6 +55,7 @@ def _item(
     summary: str = "A neutral summary.",
     source_priority: int = 2,
     raw: str = "{}",
+    category: str = "lab",
 ) -> Item:
     return Item(
         id=id_,
@@ -60,7 +63,7 @@ def _item(
         url="https://example.com/a",
         source="Source",
         source_priority=source_priority,
-        category="lab",
+        category=category,
         published_at=datetime(2026, 7, 20, 12, 0, tzinfo=UTC),
         collected_at=datetime(2026, 7, 20, 12, 0, tzinfo=UTC),
         summary=summary,
@@ -246,6 +249,129 @@ class TestClassifyItemsScoreKeep:
             Significance(
                 item_id="score-keep",
                 label=Verdict.SIGNIFICANT,
+                mode=Mode.DETERMINISTIC,
+                model=None,
+            )
+        ]
+        assert llm_available is True
+        assert client.calls == 0
+
+
+class TestScoreCategoryRoutineRule:
+    def test_research_category_is_routine_with_default_set(self) -> None:
+        item = _item(source_priority=5, category="research")
+
+        verdict = score(
+            item, _config(filter_routine_categories=frozenset({"research"}))
+        )
+
+        assert verdict == Verdict.ROUTINE
+
+    def test_item_category_is_normalized_before_comparison(self) -> None:
+        # The item side of the normalization contract: a raw category with
+        # mixed case and surrounding whitespace must still match the
+        # normalized routine set. Guards against a regression that drops
+        # `_normalize_category(item.category)` while keeping config-side
+        # normalization.
+        item = _item(source_priority=5, category="  Research  ")
+
+        verdict = score(
+            item, _config(filter_routine_categories=frozenset({"research"}))
+        )
+
+        assert verdict == Verdict.ROUTINE
+
+    def test_p1_research_item_still_wins_auto_keep(self) -> None:
+        item = _item(source_priority=1, category="research")
+
+        verdict = score(
+            item,
+            _config(
+                filter_keep_priority=1,
+                filter_routine_categories=frozenset({"research"}),
+            ),
+        )
+
+        assert verdict == Verdict.SIGNIFICANT
+
+    def test_high_score_research_item_still_wins_score_keep(self) -> None:
+        item = _item(
+            source_priority=5,
+            category="research",
+            raw=_raw(50, "hf_upvotes"),
+        )
+
+        verdict = score(
+            item,
+            _config(
+                filter_hf_keep_upvotes=50,
+                filter_routine_categories=frozenset({"research"}),
+            ),
+        )
+
+        assert verdict == Verdict.SIGNIFICANT
+
+    def test_non_routine_category_falls_through(self) -> None:
+        item = _item(source_priority=5, category="news")
+
+        verdict = score(
+            item, _config(filter_routine_categories=frozenset({"research"}))
+        )
+
+        assert verdict is None
+
+    def test_empty_routine_categories_never_fires(self) -> None:
+        item = _item(source_priority=5, category="research")
+
+        verdict = score(item, _config(filter_routine_categories=frozenset()))
+
+        assert verdict is None
+
+    def test_raised_auto_keep_priority_precedes_routine_rule(self) -> None:
+        item = _item(source_priority=2, category="research")
+
+        verdict = score(
+            item,
+            _config(
+                filter_keep_priority=2,
+                filter_routine_categories=frozenset({"research"}),
+            ),
+        )
+
+        assert verdict == Verdict.SIGNIFICANT
+
+    def test_missing_category_never_raises_and_does_not_fire(self) -> None:
+        item = _item(source_priority=5, category="")
+
+        verdict = score(
+            item, _config(filter_routine_categories=frozenset({"research"}))
+        )
+
+        assert verdict is None
+
+    def test_unrecognized_category_never_raises_and_does_not_fire(self) -> None:
+        item = _item(source_priority=5, category="unknown-category")
+
+        verdict = score(
+            item, _config(filter_routine_categories=frozenset({"research"}))
+        )
+
+        assert verdict is None
+
+
+class TestClassifyItemsCategoryRoutine:
+    def test_research_category_short_circuits_llm(self) -> None:
+        item = _item(id_="research-item", source_priority=5, category="research")
+        client = _FakeLLMClient([])
+
+        verdicts, llm_available = classify_items(
+            [item], client, _config(filter_routine_categories=frozenset({"research"}))
+        )
+
+        assert verdicts == [
+            Significance(
+                item_id="research-item",
+                label=Verdict.ROUTINE,
                 mode=Mode.DETERMINISTIC,
                 model=None,
             )

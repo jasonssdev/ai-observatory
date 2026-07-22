@@ -96,6 +96,11 @@ def _meets_score_keep_threshold(item: Item, config: Config) -> bool:
     return score_value >= threshold
 
 
+def _normalize_category(value: str) -> str:
+    """Normalize a category token for comparison: strip + casefold."""
+    return value.strip().casefold()
+
+
 def score(item: Item, config: Config) -> Verdict | None:
     """Classify `item` deterministically, or return `None` if UNCERTAIN.
 
@@ -104,7 +109,12 @@ def score(item: Item, config: Config) -> Verdict | None:
     `raw[SIGNAL_SCORE_KEY]` meets or exceeds the per-`raw[SIGNAL_SCALE_KEY]`
     keep threshold are also auto-kept as `SIGNIFICANT` (this rule is
     evaluated before the noise-keyword rule, so a high score overrides a
-    noise keyword). Items whose
+    noise keyword). Items whose normalized `category` is a member of
+    `config.filter_routine_categories` are auto-dropped as `ROUTINE`
+    (evaluated after both auto-keep tiers, so a high-priority or
+    high-score research item still stays `SIGNIFICANT`). A missing/empty
+    `category` or an empty `filter_routine_categories` set means this rule
+    never fires; it never raises. Items whose
     title or summary match a configured noise keyword are auto-dropped as
     `ROUTINE`. Anything else is UNCERTAIN (`None`) and left for the LLM to
     decide.
@@ -114,6 +124,11 @@ def score(item: Item, config: Config) -> Verdict | None:
 
     if _meets_score_keep_threshold(item, config):
         return Verdict.SIGNIFICANT
+
+    if item.category and _normalize_category(item.category) in (
+        config.filter_routine_categories
+    ):
+        return Verdict.ROUTINE
 
     haystack = f"{item.title} {item.summary}".lower()
     if any(keyword in haystack for keyword in NOISE_KEYWORDS):

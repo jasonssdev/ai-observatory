@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai_observatory.config import Config, _float_env, _optional_int_env
+from ai_observatory.config import Config, _float_env, _frozenset_env, _optional_int_env
 
 
 class TestConfigDefaultsAndOverrides:
@@ -279,6 +279,73 @@ class TestFilterScoreKeepThresholds:
 
         assert config.filter_hf_keep_upvotes is None
         assert config.filter_hn_keep_points is None
+
+
+class TestFrozensetEnv:
+    def test_unset_returns_default(self, monkeypatch) -> None:
+        monkeypatch.delenv("AIOBS_TEST_FROZENSET", raising=False)
+
+        assert _frozenset_env("AIOBS_TEST_FROZENSET", frozenset({"research"})) == (
+            frozenset({"research"})
+        )
+
+    def test_blank_returns_empty_frozenset(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_TEST_FROZENSET", "")
+
+        assert _frozenset_env("AIOBS_TEST_FROZENSET", frozenset({"research"})) == (
+            frozenset()
+        )
+
+    def test_whitespace_only_returns_empty_frozenset(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_TEST_FROZENSET", "   ")
+
+        assert _frozenset_env("AIOBS_TEST_FROZENSET", frozenset({"research"})) == (
+            frozenset()
+        )
+
+    def test_commas_only_returns_empty_frozenset(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_TEST_FROZENSET", ",,,")
+
+        assert _frozenset_env("AIOBS_TEST_FROZENSET", frozenset({"research"})) == (
+            frozenset()
+        )
+
+    def test_values_are_normalized_strip_and_casefold(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_TEST_FROZENSET", " Research, Lab ")
+
+        result = _frozenset_env("AIOBS_TEST_FROZENSET", frozenset())
+
+        assert result == frozenset({"research", "lab"})
+
+    def test_empty_tokens_are_dropped(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_TEST_FROZENSET", "research,,lab,")
+
+        result = _frozenset_env("AIOBS_TEST_FROZENSET", frozenset())
+
+        assert result == frozenset({"research", "lab"})
+
+
+class TestFilterRoutineCategories:
+    def test_unset_defaults_to_research(self, monkeypatch) -> None:
+        monkeypatch.delenv("AIOBS_FILTER_ROUTINE_CATEGORIES", raising=False)
+
+        config = Config.from_env()
+
+        assert config.filter_routine_categories == frozenset({"research"})
+
+    def test_env_override_is_parsed_and_normalized(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_FILTER_ROUTINE_CATEGORIES", " Research, Lab ")
+
+        config = Config.from_env()
+
+        assert config.filter_routine_categories == frozenset({"research", "lab"})
+
+    def test_blank_env_var_disables_the_rule(self, monkeypatch) -> None:
+        monkeypatch.setenv("AIOBS_FILTER_ROUTINE_CATEGORIES", "")
+
+        config = Config.from_env()
+
+        assert config.filter_routine_categories == frozenset()
 
 
 class TestOllamaSettings:
