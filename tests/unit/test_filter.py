@@ -275,6 +275,22 @@ class TestParseVerdict:
     def test_substring_match_within_longer_sentence(self) -> None:
         assert parse_verdict("Verdict: SIGNIFICANT.") == Verdict.SIGNIFICANT
 
+    def test_leading_word_with_trailing_text(self) -> None:
+        assert (
+            parse_verdict("SIGNIFICANT — major model release") == Verdict.SIGNIFICANT
+        )
+
+
+class TestParseVerdictNegation:
+    def test_negated_significant_is_routine(self) -> None:
+        assert (
+            parse_verdict("This is not significant, it's routine.")
+            == Verdict.ROUTINE
+        )
+
+    def test_insignificant_is_not_a_significant_token(self) -> None:
+        assert parse_verdict("insignificant") == Verdict.ROUTINE
+
 
 class TestParseVerdictMalformedDefault:
     def test_unparseable_text_defaults_to_routine(self) -> None:
@@ -294,6 +310,17 @@ class TestBuildPrompt:
         assert "Something happened." in prompt
         assert "SIGNIFICANT" in prompt
         assert "ROUTINE" in prompt
+
+    def test_prompt_contains_rubric_and_one_word_instruction(self) -> None:
+        item = _item(title="Breaking AI News", summary="Something happened.")
+
+        prompt = build_prompt(item)
+
+        assert "selective" in prompt
+        assert "When in doubt" in prompt
+        assert "arXiv" in prompt
+        assert "tutorials" in prompt
+        assert "Answer with ONLY one word" in prompt
 
 
 class _FakeLLMClient:

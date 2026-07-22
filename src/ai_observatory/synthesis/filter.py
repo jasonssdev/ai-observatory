@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -120,28 +121,58 @@ def score(item: Item, config: Config) -> Verdict | None:
     return None
 
 
+_NEGATIONS = {"not", "no", "non", "isn't", "isnt"}
+
+
 def parse_verdict(text: str) -> Verdict:
     """Tolerantly parse an LLM verdict string, defaulting to `ROUTINE`.
 
-    Normalizes case/whitespace and matches by substring. An unparseable
-    or ambiguous response defaults to `ROUTINE` (the documented safe
-    default — never `SIGNIFICANT` by default).
+    Normalizes case/whitespace and matches by word-boundary token, not
+    substring — so `"insignificant"` never resolves as `"significant"`.
+    Scans tokens left-to-right for the first decisive word
+    (`"significant"` or `"routine"`). A `"significant"` token immediately
+    preceded by a negation word (`not`, `no`, `non`, `isn't`, `isnt`)
+    resolves to `ROUTINE`. An unparseable, empty, or ambiguous response
+    (no decisive token found) defaults to `ROUTINE` (the documented safe
+    default — never `SIGNIFICANT` by default). Pure, never raises.
     """
-    normalized = text.strip().lower()
-    if "significant" in normalized:
-        return Verdict.SIGNIFICANT
+    tokens = re.findall(r"[a-z']+", text.lower())
+    for i, token in enumerate(tokens):
+        if token == "significant":
+            if i > 0 and tokens[i - 1] in _NEGATIONS:
+                return Verdict.ROUTINE
+            return Verdict.SIGNIFICANT
+        if token == "routine":
+            return Verdict.ROUTINE
     return Verdict.ROUTINE
 
 
 def build_prompt(item: Item) -> str:
-    """Build the one-word-verdict classification prompt for `item`."""
+    """Build the one-word-verdict classification prompt for `item`.
+
+    Includes a compact significance rubric so the LLM has concrete
+    criteria instead of guessing. Wording is operator-tunable and not a
+    fixed contract.
+    """
     return (
-        "You are classifying a news item as SIGNIFICANT or ROUTINE for a "
-        "daily AI news digest. Respond with exactly one word: SIGNIFICANT "
-        "or ROUTINE.\n\n"
+        "You are a STRICT editor curating a daily AI news digest for a busy "
+        "professional. MOST items are not worth including. Be highly "
+        "selective. When in doubt, answer ROUTINE.\n\n"
+        "SIGNIFICANT = genuinely notable news: a major model or product "
+        "launch, a landmark research result with broad impact, major funding "
+        "or acquisition, or important policy or safety news from a major lab "
+        "or company.\n"
+        "ROUTINE = individual academic or arXiv papers, incremental updates, "
+        "tutorials and how-tos, opinion or commentary, newsletters or "
+        "roundups, minor tools, and niche releases.\n\n"
+        "Examples:\n"
+        "- 'OpenAI releases GPT-5 with major reasoning gains' -> SIGNIFICANT\n"
+        "- 'A new arXiv paper proposes a benchmark for tool use' -> ROUTINE\n"
+        "- 'How to fine-tune Llama on your laptop' -> ROUTINE\n"
+        "- 'Google DeepMind announces AlphaFold 3' -> SIGNIFICANT\n\n"
         f"Title: {item.title}\n"
         f"Summary: {item.summary}\n\n"
-        "Verdict:"
+        "Answer with ONLY one word: SIGNIFICANT or ROUTINE."
     )
 
 

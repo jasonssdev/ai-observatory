@@ -108,8 +108,8 @@ class TestRenderMarkdown:
             [lab_p2_early, news_p1, lab_p1_late], [], date(2026, 7, 20), "hybrid"
         )
 
-        lab_index = content.index("## Lab")
-        news_index = content.index("## News")
+        lab_index = content.index("### Lab")
+        news_index = content.index("### News")
         lab_p1_index = content.index("Lab P1")
         lab_p2_index = content.index("Lab P2")
 

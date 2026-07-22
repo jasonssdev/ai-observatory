@@ -67,10 +67,23 @@ def _write_daily_records(
         records.write_record(record_path, content)
 
 
+def _configure_logging() -> None:
+    """Enable app-wide INFO logging while silencing httpx/httpcore noise.
+
+    `httpx`/`httpcore` emit an INFO-level line per HTTP request, which
+    would otherwise bury the app's own logging and the end-of-run summary.
+    Raising just those two loggers to WARNING keeps app INFO/warnings and
+    the summary visible.
+    """
+    logging.basicConfig(level=logging.INFO)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+
 @app.command()
 def collect() -> None:
     """Fetch, dedup, store, and render daily records for all configured sources."""
-    logging.basicConfig(level=logging.INFO)
+    _configure_logging()
 
     config = Config.from_env()
     sources = load_sources(config.sources_path)
