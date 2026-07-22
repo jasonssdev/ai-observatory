@@ -407,6 +407,41 @@ class TestClassifyItemsRunLevelFallback:
         ]
 
 
+class TestClassifyItemsProgress:
+    def test_progress_callback_called_once_per_item(self) -> None:
+        deterministic_item = _item(id_="det", source_priority=1)
+        llm_item = _item(id_="llm", source_priority=5, title="Neutral", summary="")
+        client = _FakeLLMClient(["SIGNIFICANT"])
+        calls: list[int] = []
+
+        verdicts, _llm_available = classify_items(
+            [deterministic_item, llm_item],
+            client,
+            _config(filter_keep_priority=1),
+            progress=calls.append,
+        )
+
+        assert calls == [1, 1]
+        assert len(verdicts) == 2
+
+    def test_progress_none_behaves_exactly_as_before(self) -> None:
+        deterministic_item = _item(id_="det", source_priority=1)
+        llm_item = _item(id_="llm", source_priority=5, title="Neutral", summary="")
+        client = _FakeLLMClient(["ROUTINE"])
+
+        verdicts, llm_available = classify_items(
+            [deterministic_item, llm_item],
+            client,
+            _config(filter_keep_priority=1),
+        )
+
+        assert llm_available is True
+        assert verdicts[0].label == Verdict.SIGNIFICANT
+        assert verdicts[0].mode == Mode.DETERMINISTIC
+        assert verdicts[1].label == Verdict.ROUTINE
+        assert verdicts[1].mode == Mode.LLM
+
+
 class TestClassifyItemsPure:
     def test_returns_plain_lists_with_no_storage_import(self) -> None:
         import ai_observatory.synthesis.filter as filter_module

@@ -102,21 +102,24 @@ def collect() -> None:
     collected_items = []
     sources_queried = 0
     empty_sources = 0
-    for source in sources:
-        collector = collectors.get(source.collector)
-        if collector is None:
-            logger.warning(
-                "Skipping source %s: unknown collector %r",
-                source.name,
-                source.collector,
-            )
-            continue
-        sources_queried += 1
-        items = collector.collect(source)
-        if not items:
-            empty_sources += 1
-            logger.warning("Source %s returned no items", source.name)
-        collected_items.extend(items)
+    with typer.progressbar(
+        sources, label="Collecting", item_show_func=lambda s: s.name if s else ""
+    ) as bar:
+        for source in bar:
+            collector = collectors.get(source.collector)
+            if collector is None:
+                logger.warning(
+                    "Skipping source %s: unknown collector %r",
+                    source.name,
+                    source.collector,
+                )
+                continue
+            sources_queried += 1
+            items = collector.collect(source)
+            if not items:
+                empty_sources += 1
+                logger.warning("Source %s returned no items", source.name)
+            collected_items.extend(items)
 
     deduped_items = dedup_batch(collected_items)
 
@@ -132,7 +135,12 @@ def collect() -> None:
             config.ollama_url, config.ollama_model, config.ollama_timeout_seconds
         )
         unclassified = db.unclassified_within(connection, start, end)
-        verdicts, llm_available = classify_items(unclassified, llm_client, config)
+        with typer.progressbar(
+            length=len(unclassified), label="Classifying"
+        ) as bar:
+            verdicts, llm_available = classify_items(
+                unclassified, llm_client, config, progress=bar.update
+            )
         db.upsert_significance(connection, verdicts)
         mode = "hybrid" if llm_available else "deterministic-only"
 
