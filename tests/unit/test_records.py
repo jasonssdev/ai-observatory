@@ -11,6 +11,7 @@ from ai_observatory.storage.models import Item
 from ai_observatory.storage.records import (
     dates_within_window,
     render_markdown,
+    window_start,
     write_record,
 )
 
@@ -323,6 +324,15 @@ class TestDatesWithinWindow:
         result = dates_within_window(set(), self._TODAY, window_days=7)
 
         assert result == {self._TODAY}
+
+
+class TestWindowStart:
+    def test_window_start_returns_today_minus_window_days(self) -> None:
+        today = date(2026, 7, 20)
+
+        result = window_start(today, window_days=7)
+
+        assert result == date(2026, 7, 13)
 
 
 if __name__ == "__main__":

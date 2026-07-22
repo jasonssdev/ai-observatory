@@ -17,6 +17,16 @@ _CATEGORY_ORDER = [
 ]
 
 
+def window_start(today: date, window_days: int) -> date:
+    """Return the earliest date included in the render/classify window.
+
+    Single source of truth for the window's lower bound, shared by
+    `dates_within_window` (render) and the CLI's classification scope, so
+    the two cannot drift apart.
+    """
+    return today - timedelta(days=window_days)
+
+
 def dates_within_window(
     candidate_dates: set[date], today: date, window_days: int
 ) -> set[date]:
@@ -26,7 +36,7 @@ def dates_within_window(
     `today` is always included in the result, even if absent from
     `candidate_dates`. Dates after `today` (future-dated) are excluded.
     """
-    earliest = today - timedelta(days=window_days)
+    earliest = window_start(today, window_days)
     kept = {d for d in candidate_dates if earliest <= d <= today}
     kept.add(today)
     return kept

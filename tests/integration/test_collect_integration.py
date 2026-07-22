@@ -8,6 +8,7 @@ single stored row and a single rendered Markdown line.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -21,7 +22,7 @@ from ai_observatory.collection.hn_algolia import HnAlgoliaCollector
 from ai_observatory.collection.rss import RssCollector
 from ai_observatory.storage import db, records
 from ai_observatory.storage.models import Item
-from ai_observatory.synthesis.llm import LLMResponse
+from ai_observatory.synthesis.llm import LLMError, LLMResponse
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"
 
@@ -200,6 +201,26 @@ class _FakeOllamaClient:
         return LLMResponse(text="SIGNIFICANT", model=self.model, raw={})
 
 
+class _CountingOllamaClient:
+    """Fake `LLMClient` with a class-level call counter shared across runs.
+
+    Unlike `_FakeOllamaClient` (per-instance counter), this tracks total
+    calls across multiple `collect()` invocations, each of which builds a
+    fresh client instance.
+    """
+
+    total_calls = 0
+
+    def __init__(self, url: str, model: str, timeout: float) -> None:
+        self.url = url
+        self.model = model
+        self.timeout = timeout
+
+    def generate(self, prompt: str) -> LLMResponse:
+        type(self).total_calls += 1
+        return LLMResponse(text="SIGNIFICANT", model=self.model, raw={})
+
+
 class _FixedToday(datetime):
     """Freezes `datetime.now(UTC)` to match the hybrid-filter fixture's date."""
 
@@ -276,6 +297,245 @@ class TestCollectorDispatch:
         assert "Hugging Face Daily Papers" in sources_seen
         assert "Hacker News (AI)" in sources_seen
         assert "Unsupported Source" not in sources_seen
+
+
+class _FixedTodayNextDay(datetime):
+    """Freezes `datetime.now(UTC)` one day after the hybrid-filter fixture's
+    dates, so its items are yesterday-published (in-window, not today)."""
+
+    @classmethod
+    def now(cls, tz=None):  # noqa: ANN001 - matches datetime.now signature
+        return datetime(2026, 7, 21, 12, 0, tzinfo=tz)
+
+
+class TestCollectClassifiesWithinWindowNotOnlyToday:
+    def test_yesterday_dated_items_are_classified_and_render_in_correct_bucket(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        sources_path = tmp_path / "sources.yaml"
+        sources_path.write_text(
+            "- name: Test Source\n"
+            "  collector: rss\n"
+            "  url: https://example.com/feed.xml\n"
+            "  category: news\n"
+            "  priority: 5\n",
+            encoding="utf-8",
+        )
+        records_dir = tmp_path / "records"
+        db_path = tmp_path / "observatory.db"
+
+        monkeypatch.setenv("AIOBS_SOURCES_PATH", str(sources_path))
+        monkeypatch.setenv("AIOBS_RECORDS_DIR", str(records_dir))
+        monkeypatch.setenv("AIOBS_DB_PATH", str(db_path))
+        monkeypatch.setattr("ai_observatory.cli.HttpxFetcher", _FakeFetcher)
+        monkeypatch.setattr("ai_observatory.cli.OllamaClient", _FakeOllamaClient)
+        monkeypatch.setattr("ai_observatory.cli.datetime", _FixedTodayNextDay)
+
+        collect()
+
+        connection = db.connect(str(db_path))
+        try:
+            verdicts = connection.execute(
+                "SELECT COUNT(*) FROM item_significance"
+            ).fetchone()[0]
+        finally:
+            connection.close()
+        # Before the fix, only today's items were classified: yesterday-dated
+        # fixture items got zero verdicts.
+        assert verdicts > 0
+
+        content = (records_dir / "2026-07-20.md").read_text(encoding="utf-8")
+        significant_section = content[
+            content.index("## Significant") : content.index("## Set aside")
+        ]
+        set_aside_section = content[content.index("## Set aside") :]
+        assert "New reasoning benchmark results announced" in significant_section
+        assert "Company announces new funding round" in set_aside_section
+        assert "Company announces new funding round" not in significant_section
+
+    def test_idempotent_rerun_within_window_does_not_reclassify(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        sources_path = tmp_path / "sources.yaml"
+        sources_path.write_text(
+            "- name: Test Source\n"
+            "  collector: rss\n"
+            "  url: https://example.com/feed.xml\n"
+            "  category: news\n"
+            "  priority: 5\n",
+            encoding="utf-8",
+        )
+        records_dir = tmp_path / "records"
+        db_path = tmp_path / "observatory.db"
+
+        monkeypatch.setenv("AIOBS_SOURCES_PATH", str(sources_path))
+        monkeypatch.setenv("AIOBS_RECORDS_DIR", str(records_dir))
+        monkeypatch.setenv("AIOBS_DB_PATH", str(db_path))
+        monkeypatch.setattr("ai_observatory.cli.HttpxFetcher", _FakeFetcher)
+        monkeypatch.setattr("ai_observatory.cli.OllamaClient", _CountingOllamaClient)
+        monkeypatch.setattr("ai_observatory.cli.datetime", _FixedTodayNextDay)
+
+        _CountingOllamaClient.total_calls = 0
+        collect()
+        calls_after_first_run = _CountingOllamaClient.total_calls
+
+        collect()
+        calls_after_second_run = _CountingOllamaClient.total_calls
+
+        # Everything within the window is already classified after the
+        # first run; the second run must issue zero new LLM calls.
+        assert calls_after_first_run > 0
+        assert calls_after_second_run == calls_after_first_run
+
+
+_EMPTY_RSS_FEED = (
+    b'<?xml version="1.0" encoding="UTF-8"?>'
+    b"<rss version=\"2.0\"><channel>"
+    b"<title>Empty Fixture Feed</title>"
+    b"<link>https://example.com</link>"
+    b"<description>Deliberately empty feed.</description>"
+    b"</channel></rss>"
+)
+
+
+class _TwoSourceFetcher:
+    """Serves the hybrid-filter fixture for one URL, an empty feed for another."""
+
+    def __init__(self, *, user_agent: str) -> None:
+        self.user_agent = user_agent
+
+    def get(self, url: str) -> bytes:
+        if "empty.example.com" in url:
+            return _EMPTY_RSS_FEED
+        return (FIXTURES_DIR / "feed_hybrid_filter.xml").read_bytes()
+
+
+class _RaisingFirstCallOllamaClient:
+    """Fake `LLMClient`: raises `LLMError` on the first call, never called again."""
+
+    def __init__(self, url: str, model: str, timeout: float) -> None:
+        self.url = url
+        self.model = model
+        self.timeout = timeout
+
+    def generate(self, prompt: str) -> LLMResponse:
+        raise LLMError("LLM unavailable")
+
+
+class TestRunSummary:
+    def _write_two_source_sources_yaml(self, tmp_path: Path) -> Path:
+        sources_path = tmp_path / "sources.yaml"
+        sources_path.write_text(
+            "- name: Populated Source\n"
+            "  collector: rss\n"
+            "  url: https://example.com/feed.xml\n"
+            "  category: news\n"
+            "  priority: 5\n"
+            "- name: Empty Source\n"
+            "  collector: rss\n"
+            "  url: https://empty.example.com/feed.xml\n"
+            "  category: news\n"
+            "  priority: 5\n",
+            encoding="utf-8",
+        )
+        return sources_path
+
+    def test_summary_reports_real_run_counts(
+        self, tmp_path: Path, monkeypatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        sources_path = self._write_two_source_sources_yaml(tmp_path)
+        records_dir = tmp_path / "records"
+        db_path = tmp_path / "observatory.db"
+
+        monkeypatch.setenv("AIOBS_SOURCES_PATH", str(sources_path))
+        monkeypatch.setenv("AIOBS_RECORDS_DIR", str(records_dir))
+        monkeypatch.setenv("AIOBS_DB_PATH", str(db_path))
+        monkeypatch.setattr("ai_observatory.cli.HttpxFetcher", _TwoSourceFetcher)
+        monkeypatch.setattr("ai_observatory.cli.OllamaClient", _FakeOllamaClient)
+        monkeypatch.setattr("ai_observatory.cli.datetime", _FixedTodayNextDay)
+
+        collect()
+
+        out = capsys.readouterr().out
+        assert "Sources queried: 2" in out
+        assert "Sources returning nothing: 1" in out
+        assert "Items collected: 2" in out
+        assert "Items after dedup: 2" in out
+        assert "Items classified this run: 2 (significant: 1, set aside: 1)" in out
+        assert "Filter mode: hybrid" in out
+
+    def test_deterministic_only_mode_is_reported(
+        self, tmp_path: Path, monkeypatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        sources_path = self._write_two_source_sources_yaml(tmp_path)
+        records_dir = tmp_path / "records"
+        db_path = tmp_path / "observatory.db"
+
+        monkeypatch.setenv("AIOBS_SOURCES_PATH", str(sources_path))
+        monkeypatch.setenv("AIOBS_RECORDS_DIR", str(records_dir))
+        monkeypatch.setenv("AIOBS_DB_PATH", str(db_path))
+        monkeypatch.setattr("ai_observatory.cli.HttpxFetcher", _TwoSourceFetcher)
+        monkeypatch.setattr(
+            "ai_observatory.cli.OllamaClient", _RaisingFirstCallOllamaClient
+        )
+        monkeypatch.setattr("ai_observatory.cli.datetime", _FixedTodayNextDay)
+
+        collect()
+
+        out = capsys.readouterr().out
+        assert "Filter mode: deterministic-only" in out
+
+
+class _FailingSourceFetcher:
+    """Raises for one URL (simulating a fetch failure), serves a valid feed
+    for another — proving one failing source does not abort the run."""
+
+    def __init__(self, *, user_agent: str) -> None:
+        self.user_agent = user_agent
+
+    def get(self, url: str) -> bytes:
+        if "failing.example.com" in url:
+            raise ConnectionError("simulated fetch failure")
+        return (FIXTURES_DIR / "feed_hybrid_filter.xml").read_bytes()
+
+
+class TestPerSourceFailureVisibility:
+    def test_failing_source_logs_visible_warning_and_run_completes(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        sources_path = tmp_path / "sources.yaml"
+        sources_path.write_text(
+            "- name: Good Source\n"
+            "  collector: rss\n"
+            "  url: https://example.com/feed.xml\n"
+            "  category: news\n"
+            "  priority: 5\n"
+            "- name: Failing Source\n"
+            "  collector: rss\n"
+            "  url: https://failing.example.com/feed.xml\n"
+            "  category: news\n"
+            "  priority: 5\n",
+            encoding="utf-8",
+        )
+        records_dir = tmp_path / "records"
+        db_path = tmp_path / "observatory.db"
+
+        monkeypatch.setenv("AIOBS_SOURCES_PATH", str(sources_path))
+        monkeypatch.setenv("AIOBS_RECORDS_DIR", str(records_dir))
+        monkeypatch.setenv("AIOBS_DB_PATH", str(db_path))
+        monkeypatch.setattr("ai_observatory.cli.HttpxFetcher", _FailingSourceFetcher)
+        monkeypatch.setattr("ai_observatory.cli.OllamaClient", _FakeOllamaClient)
+        monkeypatch.setattr("ai_observatory.cli.datetime", _FixedTodayNextDay)
+
+        with caplog.at_level(logging.WARNING):
+            collect()  # must not raise; run completes using the good source
+
+        assert any(
+            "Failing Source" in record.message for record in caplog.records
+        )
 
 
 class TestJsonRssDedupCompatibility:
