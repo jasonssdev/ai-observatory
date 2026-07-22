@@ -6,6 +6,7 @@ import logging
 import sqlite3
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
@@ -81,11 +82,24 @@ def _configure_logging() -> None:
 
 
 @app.command()
-def collect() -> None:
+def collect(
+    model: Annotated[
+        str | None,
+        typer.Option(
+            "--model",
+            help=(
+                "Ollama model for this run. Overrides AIOBS_OLLAMA_MODEL and "
+                "the config default. Empty or omitted falls back to the "
+                "default."
+            ),
+        ),
+    ] = None,
+) -> None:
     """Fetch, dedup, store, and render daily records for all configured sources."""
     _configure_logging()
 
     config = Config.from_env()
+    resolved_model = model or config.ollama_model
     sources = load_sources(config.sources_path)
 
     fetcher = HttpxFetcher(user_agent=config.user_agent)
@@ -132,7 +146,7 @@ def collect() -> None:
         end = today + timedelta(days=1)
 
         llm_client = OllamaClient(
-            config.ollama_url, config.ollama_model, config.ollama_timeout_seconds
+            config.ollama_url, resolved_model, config.ollama_timeout_seconds
         )
         unclassified = db.unclassified_within(connection, start, end)
         with typer.progressbar(

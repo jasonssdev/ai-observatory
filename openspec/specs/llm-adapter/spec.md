@@ -77,14 +77,14 @@ JSON, or is valid JSON missing the `response` field.
 The system MUST resolve the Ollama endpoint URL, model name, and request
 timeout from `AIOBS_OLLAMA_URL`, `AIOBS_OLLAMA_MODEL`, and
 `AIOBS_OLLAMA_TIMEOUT_SECONDS`, defaulting respectively to
-`http://localhost:11434`, `llama3.2`, and `60.0` seconds when unset, missing,
-or invalid.
+`http://localhost:11434`, `qwen2.5:7b`, and `60.0` seconds when unset,
+missing, or invalid.
 
 #### Scenario: Defaults apply when unset
 - GIVEN no `AIOBS_OLLAMA_*` environment variables are set
 - WHEN configuration is resolved
-- THEN `ollama_url == "http://localhost:11434"`, `ollama_model == "llama3.2"`,
-  and `ollama_timeout_seconds == 60.0`
+- THEN `ollama_url == "http://localhost:11434"`,
+  `ollama_model == "qwen2.5:7b"`, and `ollama_timeout_seconds == 60.0`
 
 #### Scenario: Overrides apply when set
 - GIVEN `AIOBS_OLLAMA_URL`, `AIOBS_OLLAMA_MODEL`, and
