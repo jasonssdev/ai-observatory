@@ -86,4 +86,3 @@ Estimate ~50-90 changed lines: cli.py delta (~5-10), smoke tests (~25-40), integ
 test (~15-30), spec delta (~15-25). Small, single-PR slice. `400-line budget risk: Low`.
 `Chained PRs recommended: No`. `Decision needed before apply: Yes` — confirm whether to
 also bump `_DEFAULT_OLLAMA_MODEL` (Open Decision), otherwise it stays out of scope.
-</content>
