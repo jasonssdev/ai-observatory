@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import typer
@@ -70,6 +70,8 @@ def _write_daily_records(
 @app.command()
 def collect() -> None:
     """Fetch, dedup, store, and render daily records for all configured sources."""
+    logging.basicConfig(level=logging.INFO)
+
     config = Config.from_env()
     sources = load_sources(config.sources_path)
 
@@ -85,6 +87,8 @@ def collect() -> None:
     }
 
     collected_items = []
+    sources_queried = 0
+    empty_sources = 0
     for source in sources:
         collector = collectors.get(source.collector)
         if collector is None:
@@ -94,7 +98,12 @@ def collect() -> None:
                 source.collector,
             )
             continue
-        collected_items.extend(collector.collect(source))
+        sources_queried += 1
+        items = collector.collect(source)
+        if not items:
+            empty_sources += 1
+            logger.warning("Source %s returned no items", source.name)
+        collected_items.extend(items)
 
     deduped_items = dedup_batch(collected_items)
 
@@ -103,11 +112,13 @@ def collect() -> None:
         db.upsert_items(connection, deduped_items)
 
         today = datetime.now(UTC).date()
+        start = records.window_start(today, config.record_window_days)
+        end = today + timedelta(days=1)
 
         llm_client = OllamaClient(
             config.ollama_url, config.ollama_model, config.ollama_timeout_seconds
         )
-        unclassified = db.unclassified_for_date(connection, today)
+        unclassified = db.unclassified_within(connection, start, end)
         verdicts, llm_available = classify_items(unclassified, llm_client, config)
         db.upsert_significance(connection, verdicts)
         mode = "hybrid" if llm_available else "deterministic-only"
@@ -123,5 +134,20 @@ def collect() -> None:
             config.record_window_days,
             mode,
         )
+
+        classified_count = len(verdicts)
+        significant_count = sum(
+            verdict.label == Verdict.SIGNIFICANT for verdict in verdicts
+        )
+        set_aside_count = classified_count - significant_count
+        typer.echo(f"Sources queried: {sources_queried}")
+        typer.echo(f"Sources returning nothing: {empty_sources}")
+        typer.echo(f"Items collected: {len(collected_items)}")
+        typer.echo(f"Items after dedup: {len(deduped_items)}")
+        typer.echo(
+            f"Items classified this run: {classified_count} "
+            f"(significant: {significant_count}, set aside: {set_aside_count})"
+        )
+        typer.echo(f"Filter mode: {mode}")
     finally:
         connection.close()

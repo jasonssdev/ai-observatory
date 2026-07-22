@@ -208,6 +208,29 @@ def unclassified_for_date(
     return [_row_to_item(row) for row in cursor.fetchall()]
 
 
+def unclassified_within(
+    connection: sqlite3.Connection, start_date: date, end_date: date
+) -> list[Item]:
+    """Return unclassified items with `published_at` in `[start_date, end_date)`.
+
+    `start_date` is inclusive, `end_date` is exclusive. Mirrors
+    `unclassified_for_date` but scoped to a window instead of a single UTC
+    calendar day.
+    """
+    cursor = connection.execute(
+        f"""
+        SELECT {_SELECT_COLUMNS}
+        FROM items
+        LEFT JOIN item_significance ON item_significance.item_id = items.id
+        WHERE item_significance.label IS NULL
+        AND items.published_at >= ? AND items.published_at < ?
+        ORDER BY items.published_at
+        """,
+        (start_date.isoformat(), end_date.isoformat()),
+    )
+    return [_row_to_item(row) for row in cursor.fetchall()]
+
+
 def clear_significance(connection: sqlite3.Connection) -> None:
     """Delete all persisted significance verdicts (reclassify path)."""
     connection.execute("DELETE FROM item_significance")

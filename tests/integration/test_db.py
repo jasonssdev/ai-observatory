@@ -284,6 +284,74 @@ class TestUnclassifiedForDate:
         assert {item.id for item in result} == {"unclassified"}
 
 
+class TestUnclassifiedWithin:
+    def test_returns_only_in_range_unclassified_items(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        db.upsert_items(
+            conn,
+            [
+                _item(id_="in-range", published_at=_utc(2026, 7, 18, 1, 0)),
+                _item(id_="out-of-range", published_at=_utc(2020, 1, 1, 1, 0)),
+            ],
+        )
+
+        result = db.unclassified_within(
+            conn, date(2026, 7, 13), date(2026, 7, 21)
+        )
+
+        assert {item.id for item in result} == {"in-range"}
+
+    def test_excludes_classified_and_out_of_range(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        db.upsert_items(
+            conn,
+            [
+                _item(id_="classified", published_at=_utc(2026, 7, 18, 1, 0)),
+                _item(id_="unclassified", published_at=_utc(2026, 7, 18, 2, 0)),
+                _item(id_="out-of-range", published_at=_utc(2020, 1, 1, 1, 0)),
+            ],
+        )
+        db.upsert_significance(
+            conn,
+            [
+                Significance(
+                    item_id="classified",
+                    label=Verdict.SIGNIFICANT,
+                    mode=Mode.DETERMINISTIC,
+                    model=None,
+                ),
+            ],
+        )
+
+        result = db.unclassified_within(
+            conn, date(2026, 7, 13), date(2026, 7, 21)
+        )
+
+        assert {item.id for item in result} == {"unclassified"}
+
+    def test_boundaries_start_inclusive_end_exclusive(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        start = date(2026, 7, 13)
+        end = date(2026, 7, 21)  # today (2026-07-20) + 1 day, exclusive
+
+        db.upsert_items(
+            conn,
+            [
+                _item(id_="at-start", published_at=_utc(2026, 7, 13, 0, 0)),
+                _item(id_="day-before-start", published_at=_utc(2026, 7, 12, 23, 0)),
+                _item(id_="today-item", published_at=_utc(2026, 7, 20, 23, 59)),
+                _item(id_="future", published_at=_utc(2026, 7, 21, 0, 0)),
+            ],
+        )
+
+        result = db.unclassified_within(conn, start, end)
+
+        assert {item.id for item in result} == {"at-start", "today-item"}
+
+
 class TestClearSignificance:
     def test_clear_makes_item_reappear_as_unclassified(
         self, conn: sqlite3.Connection
