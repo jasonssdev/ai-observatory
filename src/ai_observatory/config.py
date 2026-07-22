@@ -20,6 +20,7 @@ _DEFAULT_OLLAMA_TIMEOUT_SECONDS = 60.0
 _DEFAULT_FILTER_KEEP_PRIORITY = 1
 _DEFAULT_HF_MIN_UPVOTES = 5
 _DEFAULT_HN_MIN_POINTS = 30
+_DEFAULT_FILTER_ROUTINE_CATEGORIES = frozenset({"research"})
 
 
 def _int_env(name: str, default: int) -> int:
@@ -51,6 +52,23 @@ def _optional_int_env(name: str) -> int | None:
     return value if value >= 0 else None
 
 
+def _frozenset_env(name: str, default: frozenset[str]) -> frozenset[str]:
+    """Read a comma-separated env var into a normalized `frozenset[str]`.
+
+    Mirrors `_int_env`: `default` applies only when the env var is unset. A
+    present value (including blank, whitespace-only, or commas-only)
+    resolves to a parsed frozenset, which may be empty — an empty set
+    disables the rule that consumes it. Each token is normalized with
+    `.strip().casefold()`; empty tokens are dropped.
+    """
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return frozenset(
+        token.strip().casefold() for token in raw.split(",") if token.strip()
+    )
+
+
 def _float_env(name: str, default: float) -> float:
     """Read a float env var, failing safe to `default` on missing/invalid/negative."""
     raw = os.environ.get(name)
@@ -80,6 +98,7 @@ class Config:
     hn_min_points: int
     filter_hf_keep_upvotes: int | None
     filter_hn_keep_points: int | None
+    filter_routine_categories: frozenset[str]
 
     @classmethod
     def from_env(cls) -> Config:
@@ -107,4 +126,7 @@ class Config:
             hn_min_points=_int_env("AIOBS_HN_MIN_POINTS", _DEFAULT_HN_MIN_POINTS),
             filter_hf_keep_upvotes=_optional_int_env("AIOBS_FILTER_HF_KEEP_UPVOTES"),
             filter_hn_keep_points=_optional_int_env("AIOBS_FILTER_HN_KEEP_POINTS"),
+            filter_routine_categories=_frozenset_env(
+                "AIOBS_FILTER_ROUTINE_CATEGORIES", _DEFAULT_FILTER_ROUTINE_CATEGORIES
+            ),
         )
