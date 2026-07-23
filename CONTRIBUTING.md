@@ -26,7 +26,7 @@ uv run pytest            # run the test suite
 uv run ruff check .      # lint
 ```
 
-Both must pass before a pull request can be merged.
+Both must pass before a pull request can be merged. CI runs these same commands automatically on every pull request.
 
 ## Project layout
 
