@@ -1,0 +1,46 @@
+name: Source suggestion
+description: Propose a new source for the daily collection
+title: "[Source]: "
+labels: ["source"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Sources are curated for credibility over volume — see [docs/research.md](https://github.com/jasonssdev/ai-observatory/blob/main/docs/research.md) for the criteria and [docs/source-selection.md](https://github.com/jasonssdev/ai-observatory/blob/main/docs/source-selection.md) for the current list.
+  - type: input
+    id: name
+    attributes:
+      label: Source name
+      placeholder: "e.g. Anthropic Blog"
+    validations:
+      required: true
+  - type: input
+    id: url
+    attributes:
+      label: Feed or API URL
+      description: The RSS/Atom feed or JSON API endpoint, not the homepage.
+      placeholder: "https://example.com/feed.xml"
+    validations:
+      required: true
+  - type: dropdown
+    id: format
+    attributes:
+      label: Format
+      options:
+        - RSS / Atom
+        - JSON API
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: credibility
+    attributes:
+      label: Why is this source credible and worth watching?
+      description: What does it cover, who is behind it, and why does it add signal rather than noise?
+    validations:
+      required: true
+  - type: input
+    id: volume
+    attributes:
+      label: Approximate volume
+      placeholder: "e.g. 2-3 posts per week"

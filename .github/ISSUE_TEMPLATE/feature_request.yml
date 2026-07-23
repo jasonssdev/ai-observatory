@@ -1,0 +1,35 @@
+name: Feature request
+description: Suggest an improvement or new capability
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before suggesting a feature, please check [docs/vision.md](https://github.com/jasonssdev/ai-observatory/blob/main/docs/vision.md) (what the project is and is not) and [docs/roadmap.md](https://github.com/jasonssdev/ai-observatory/blob/main/docs/roadmap.md) (what is already planned).
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the problem or need, not just the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How do you imagine it working?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you thought about, and why you prefer this one.
+  - type: checkboxes
+    id: principles
+    attributes:
+      label: Fit with project principles
+      options:
+        - label: This fits the local-first, signal-over-noise, human-decides principles in [docs/vision.md](https://github.com/jasonssdev/ai-observatory/blob/main/docs/vision.md)
+          required: true
