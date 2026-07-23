@@ -1,8 +1,10 @@
 [project]
 name = "ai-observatory"
 version = "0.1.0"
-description = "Add your description here"
+description = "A local-first system that watches the AI ecosystem daily and distills it into ranked weekly signal"
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [
     { name = "Jason Dev", email = "jasonssdev@gmail.com" }
 ]
@@ -13,6 +15,10 @@ dependencies = [
     "pyyaml>=6.0.3",
     "typer>=0.27.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/jasonssdev/ai-observatory"
+Issues = "https://github.com/jasonssdev/ai-observatory/issues"
 
 [project.scripts]
 ai-observatory = "ai_observatory:main"

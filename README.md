@@ -27,6 +27,7 @@ Local-first (records and processing stay on your machine by default; cloud is op
 | [docs/source-selection.md](docs/source-selection.md) | The operational source list — real feed/API URLs, priorities, ingestion notes. |
 | [docs/research.md](docs/research.md) | Background essay on which AI sources are credible. |
 | [AGENTS.md](AGENTS.md) | Repository guidelines and contribution conventions. |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to set up, test, and contribute changes. |
 
 ## Status
 
@@ -59,3 +60,11 @@ Precedence is `--model` > `AIOBS_OLLAMA_MODEL` env var > the config default.
 uv run pytest            # run the test suite
 uv run ruff check .      # lint
 ```
+
+## Contributing
+
+Contributions are welcome — bug reports, source suggestions, documentation, and code. Start with [CONTRIBUTING.md](CONTRIBUTING.md); the project follows the [Code of Conduct](CODE_OF_CONDUCT.md), and security issues should be reported per [SECURITY.md](SECURITY.md).
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).
