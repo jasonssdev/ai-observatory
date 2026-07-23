@@ -31,5 +31,5 @@ body:
     attributes:
       label: Fit with project principles
       options:
-        - label: This fits the local-first, signal-over-noise, human-decides principles in docs/vision.md
+        - label: This fits the local-first, signal-over-noise, human-decides principles in [docs/vision.md](https://github.com/jasonssdev/ai-observatory/blob/main/docs/vision.md)
           required: true
